@@ -1,4 +1,2 @@
 # step 1 importare dati
-install.packages("ggprofilR")
-ciao valerio
-ciao michela
+
