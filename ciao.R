@@ -1,4 +1,4 @@
-# step 1 importare dati
+# ROMANEL PROJECT
 
 #------------------------------
 # Point 1: Load the RData file
