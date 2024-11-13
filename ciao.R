@@ -1,8 +1,8 @@
 # ROMANEL PROJECT
 
-#------------------------------
+#-------------------------------
 # Point 1: Load the RData file
-#------------------------------
+#-------------------------------
 # per ketty (voi mettete il vostro path)
 load("Uterine_corpus_endometrial_carcinoma.RData")
 # raw_counts_df = contains the raw RNA-seq counts; 
@@ -30,7 +30,7 @@ r_geni_senzaId <- r_anno_df[!(geni_conId),]
 # alcuni hanno external gene name
 # li cerchiamo mediante gene name
 g_f1 <- getBM(attributes = c("ensembl_gene_id", "gene_biotype", "external_gene_name"),mart = ensembl,
-             filters = ("external_gene_name"), values = (r_geni_senzaId$external_gene_name))
+              filters = ("external_gene_name"), values = (r_geni_senzaId$external_gene_name))
 # we find 26 genes of the 838 missing but no one of this is gene coding
 # so we continue with the ones that we have (62034)
 
@@ -38,9 +38,9 @@ g_coding <- g_f[which(g_f$gene_biotype == "protein_coding"),]
 PC_r_anno <- r_anno_df[which(r_anno_df$ensembl_gene_id %in% g_coding$ensembl_gene_id),]
 PC_raw_counts <- raw_counts_df[which(row.names(raw_counts_df) %in% g_coding$ensembl_gene_id),]
 
-#-------------------------------------------
+#--------------------------------------------
 # Point 3: differential Expression Analysis
-#-------------------------------------------
+#--------------------------------------------
 library("GenomicFeatures")
 library("ggplot2")
 library("stringr")
@@ -79,7 +79,7 @@ size_df <- data.frame("sample"=colnames(filter_counts_df),
                       "read_millions"=colSums(filter_counts_df)/1000000) 
 
 ggplot(data=size_df,aes(sample,read_millions)) +
-  geom_bar(stat="identity",fill="indianred",colour="indianred",width=0.7,alpha=0.7)+
+  geom_bar(stat="identity",fill="indianred2",colour="indianred2",width=0.7,alpha=0.7)+
   coord_flip()+
   theme_bw()
 
@@ -87,7 +87,7 @@ ggplot(data=size_df,aes(sample,read_millions)) +
 long_counts_df <- gather(as.data.frame(filter_counts_df), key = "sample", value = "read_number")
 
 ggplot(data=long_counts_df,aes(sample,read_number+1)) + 
-  geom_boxplot(colour="deeppink4",fill="deeppink4",alpha=0.7) +
+  geom_boxplot(colour="cyan4",fill="cyan4",alpha=0.7) +
   theme_bw() +
   scale_y_log10()
 
@@ -109,7 +109,7 @@ head(cpm_table)
 long_cpm_df <- gather(cpm_table, key = "sample", value = "CPM")
 
 ggplot(data=long_cpm_df,aes(sample,CPM+1)) +
-  geom_boxplot(colour="olivedrab",fill="olivedrab",alpha=0.7)+
+  geom_boxplot(colour="orchid3",fill="orchid3",alpha=0.7)+
   theme_bw()+
   scale_y_log10()
 
@@ -147,7 +147,7 @@ DEGs$neg_log10_FDR <- -log10(DEGs$FDR)
 # Create a volcano plot 
 volcano_plot <- ggplot(DEGs, aes(x = logFC, y = neg_log10_FDR, color = class)) +
   geom_point(alpha = 0.6, size = 1.5) +  # Points with transparency and size
-  scale_color_manual(values = c("=" = "grey", "+" = "red", "-" = "blue")) + 
+  scale_color_manual(values = c("=" = "grey", "+" = "tomato3", "-" = "forestgreen")) + 
   labs(
     title = "Volcano Plot of Differential Expression",
     x = "Log2 Fold Change",
@@ -165,10 +165,8 @@ volcano_plot <- ggplot(DEGs, aes(x = logFC, y = neg_log10_FDR, color = class)) +
 print(volcano_plot)
 
 ##Heatmap
-cols <- cols <- c(ifelse(c_anno_df$condition == "case", "chartreuse4","burlywood3")) 
-pal <- c("blue","white","red") 
+cols <- cols <- c(ifelse(c_anno_df$condition == "case", "sienna2", "goldenrod1")) 
+pal <- c("forestgreen","white","tomato3") 
 pal <- colorRampPalette(pal)(100)
 heatmap(as.matrix(cpm_table[which(rownames(cpm_table)%in%DEGs$ensembl_gene_id[which(DEGs$class!="=")]),]),
         ColSideColors = cols,cexCol = 0.5,margins = c(4,4),col=pal,cexRow = 0.2)
-
-
