@@ -19,11 +19,20 @@ ensembl <- useMart(biomart="ensembl",dataset="hsapiens_gene_ensembl")
 attributes <- listAttributes(ensembl)
 # Find function for all genes 
 length(unique(r_anno_df$ensembl_gene_id)) # unique IDs
-g_f <- getBM(attributes = c("ensembl_gene_id", "gene_biotype"),mart = ensembl,
-             filters = ("ensembl_gene_id"), values = list(r_anno_df$ensembl_gene_id))
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+g_f <- getBM(attributes = c("ensembl_gene_id", "gene_biotype", "external_gene_name"),mart = ensembl,
+             filters = ("ensembl_gene_id"), values = (r_anno_df$ensembl_gene_id))
+
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 # mancano degli id ho solo 62034 elementi dei 62872
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+geni_conId <-  r_anno_df$ensembl_gene_id %in%  g_f$ensembl_gene_id
+r_geni_senzaId <- r_anno_df[!(geni_conId),]
+# alcuni hanno external gene name
+# li cerchiamo mediante gene name
+g_f1 <- getBM(attributes = c("ensembl_gene_id", "gene_biotype", "external_gene_name"),mart = ensembl,
+             filters = ("external_gene_name"), values = (r_geni_senzaId$external_gene_name))
+# we find 26 genes of the 838 missing but no one of this is gene coding
+# so we continue with the ones that we have (62034)
 
 g_coding <- g_f[which(g_f$gene_biotype == "protein_coding"),]
 PC_r_anno <- r_anno_df[which(r_anno_df$ensembl_gene_id %in% g_coding$ensembl_gene_id),]
