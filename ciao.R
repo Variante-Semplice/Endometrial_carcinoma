@@ -171,5 +171,14 @@ print(volcano_plot)
 cols <- cols <- c(ifelse(c_anno_df$condition == "case", "sienna2", "goldenrod1")) 
 pal <- c("forestgreen","white","tomato3") 
 pal <- colorRampPalette(pal)(100)
+
 heatmap(as.matrix(cpm_table[which(rownames(cpm_table)%in%DEGs$ensembl_gene_id[which(DEGs$class!="=")]),]),
         ColSideColors = cols,cexCol = 0.5,margins = c(4,4),col=pal,cexRow = 0.2)
+
+## Export differentially expressed genes in a text file
+up_DEGs <- DEGs[which(DEGs$class=="+"),]
+down_DEGs <- DEGs[which(DEGs$class=="-"),]
+
+write.table(up_DEGs,file="up_DEGs.txt",row.names=F,col.names=T,sep="\t",quote=F)
+write.table(down_DEGs,file="down_DEGs.txt",row.names=F,col.names=T,sep="\t",quote=F)
+write.table(DEGs,file="DEGs.txt",row.names=F,col.names=T,sep="\t",quote=F)
