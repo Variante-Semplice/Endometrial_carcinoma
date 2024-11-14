@@ -1,0 +1,142 @@
+---
+title: "Report"
+author: "Bello Ketty, Bertotti Michela and Boccolini Valerio"
+output: html_document
+date: '`r Sys.Date()`'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Load data
+
+```{r data}
+load("Uterine_corpus_endometrial_carcinoma.RData")
+```
+
+## 2. Extract protein coding genes
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+library(biomaRt)
+```
+
+
+```{r}
+ensembl <- useMart(biomart="ensembl",dataset="hsapiens_gene_ensembl")
+attributes <- listAttributes(ensembl)
+g_f <- getBM(attributes = c("ensembl_gene_id", "gene_biotype",
+                            "external_gene_name"),mart = ensembl,
+             filters = ("ensembl_gene_id"), 
+             values = (r_anno_df$ensembl_gene_id))
+
+g_coding <- g_f[which(g_f$gene_biotype == "protein_coding"),]
+PC_r_anno <- r_anno_df[which(r_anno_df$ensembl_gene_id %in% g_coding$ensembl_gene_id),]
+PC_raw_counts <- raw_counts_df[which(row.names(raw_counts_df) %in% g_coding$ensembl_gene_id),]
+```
+
+## 3. Differential Expression Analysis
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+library("GenomicFeatures")
+library("ggplot2")
+library("stringr")
+library("tidyverse")
+library("edgeR")
+library("pheatmap")
+```
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+count_thr <- 20
+repl_thr <- 5
+
+filter_vec <- apply(raw_counts_df,1,
+                    function(y) max(by(y, c_anno_df$condition, 
+                                       function(x) sum(x>=count_thr))))
+```
+
+```{r}
+#statistics for the filtering
+table(filter_vec)
+
+filter_counts_df <- raw_counts_df[filter_vec>=repl_thr,] 
+dim(filter_counts_df)
+
+# apply the filter on gene annotation
+filter_anno_df <- r_anno_df[rownames(filter_counts_df),] 
+dim(filter_anno_df)
+```
+
+```{r, echo=FALSE}
+#barplot of reads for each sample
+size_df <- data.frame("sample"=colnames(filter_counts_df), 
+                      "read_millions"=colSums(filter_counts_df)/1000000) 
+
+ggplot(data=size_df,aes(sample,read_millions)) +
+  geom_bar(stat="identity",fill="indianred2",colour="indianred2",width=0.7,alpha=0.7)+
+  coord_flip()+
+  theme_bw()
+```
+
+
+```{r, echo=FALSE}
+#boxplot of gene counts for each sample
+long_counts_df <- gather(as.data.frame(filter_counts_df), key = "sample", value = "read_number")
+
+ggplot(data=long_counts_df,aes(sample,read_number+1)) + 
+  geom_boxplot(colour="cyan4",fill="cyan4",alpha=0.7) +
+  theme_bw() +
+  scale_y_log10()
+```
+
+
+```{r}
+##Prepare Data for Differential Expression Analysis
+
+# create a DGRList object
+edge_l <- DGEList(counts=filter_counts_df, group=c_anno_df$condition, samples=c_anno_df, genes=filter_anno_df) 
+
+# normalization
+edge_n <- calcNormFactors(edge_l, method="TMM")
+
+# create a cpm table (normalized expression values)
+cpm_table <- as.data.frame(round(cpm(edge_n),2))
+```
+
+```{r, echo=FALSE}
+#boxplot after normalization
+long_cpm_df <- gather(cpm_table, key = "sample", value = "CPM")
+
+ggplot(data=long_cpm_df,aes(sample,CPM+1)) +
+  geom_boxplot(colour="orchid3",fill="orchid3",alpha=0.7)+
+  theme_bw()+
+  scale_y_log10()
+```
+
+```{r}
+group <- edge_n$samples$group 
+# define the experimental design matrix
+design <- model.matrix(~0+group, data=edge_n$samples)
+colnames(design) <- levels(edge_n$samples$group)
+rownames(design) <- edge_n$samples$sample
+
+# calculate dispersion and fit with edgeR
+edge_d <- estimateDisp(edge_n, design)
+edge_f <- glmQLFit(edge_d, design) 
+
+# definition of the contrast (conditions to be compared)
+contro <- makeContrasts("case - control", levels = design)
+
+# fit the model with generalized linear models
+edge_t <- glmQLFTest(edge_f,contrast=contro)
+DEGs <- as.data.frame(topTags(edge_t,n=20000,p.value = 0.01, sort.by = "logFC"))
+DEGs$class <- "=" # Initialize a 'class' column to categorize genes
+DEGs$class[which(DEGs$logCPM > 1 & DEGs$logFC > 1.5 & DEGs$FDR < 0.01)] <- "+"  # Up-regulated
+DEGs$class[which(DEGs$logCPM > 1 & DEGs$logFC < (-1.5) & DEGs$FDR < 0.01)] <- "-"  # Down-regulated
+
+# Sort the DEGs by log fold-change in descending order
+DEGs <- DEGs[order(DEGs$logFC,decreasing = T),]
+
+table(DEGs$class)
+```
+
