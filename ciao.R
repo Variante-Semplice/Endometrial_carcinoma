@@ -182,3 +182,14 @@ down_DEGs <- DEGs[which(DEGs$class=="-"),]
 write.table(up_DEGs,file="up_DEGs.txt",row.names=F,col.names=T,sep="\t",quote=F)
 write.table(down_DEGs,file="down_DEGs.txt",row.names=F,col.names=T,sep="\t",quote=F)
 write.table(DEGs,file="DEGs.txt",row.names=F,col.names=T,sep="\t",quote=F)
+
+#-------------------------------------
+# Point 4: GSEA using clusterProfiler
+#-------------------------------------
+##Gene Set Enrichment Analysis (GSEA) is a statistical technique used to 
+##determine whether a predefined set of genes shows statistically significant, 
+##coordinated differences in expression under two different conditions, 
+##such as "treatment" vs. "control" or "healthy" vs. "disease." 
+##Instead of evaluating individual genes separately, GSEA assesses entire groups 
+##of genes that are functionally related, such as those involved in a particular 
+##pathway or biological process.
