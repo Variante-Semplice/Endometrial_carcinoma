@@ -57,8 +57,10 @@ repl_thr <- 5 #ensures that we retain genes with counts above 20 in at least 5 s
 filter_vec <- apply(raw_counts_df,1,
                     function(y) max(by(y, c_anno_df$condition, function(x) sum(x>=count_thr))))
 # this vector checks if the gene meets the threshold in either condition 
-#by grouping counts by condition and checking if there are at least 
-#repl_thr samples with counts above count_thr
+# by grouping counts by condition and checking if there are at least 
+# repl_thr samples with counts above count_thr
+# we have 30 case and 30 control in c_anno_df, there are some genes which have
+# more than 20 reads for all the 30 case/control.
 
 #statistics for the filtering
 table(filter_vec)
@@ -68,6 +70,7 @@ filter_counts_df <- raw_counts_df[filter_vec>=repl_thr,]
 
 # check the dimension of the filtered matrix 
 dim(filter_counts_df)
+# we keep 25557 genes
 
 # apply the filter on gene annotation
 filter_anno_df <- r_anno_df[rownames(filter_counts_df),] 
