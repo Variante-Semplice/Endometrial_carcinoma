@@ -193,3 +193,111 @@ write.table(DEGs,file="DEGs.txt",row.names=F,col.names=T,sep="\t",quote=F)
 ##Instead of evaluating individual genes separately, GSEA assesses entire groups 
 ##of genes that are functionally related, such as those involved in a particular 
 ##pathway or biological process.
+
+### Load results of DEG (differentially expressed genes) analysis
+DEGs <- read.table("DEGs.txt",header=T,sep="\t",as.is=T)
+table(DEGs$class) #checks the count of genes by class (upregulated, downregulated or the same)
+
+### Use biomaRt to map Gene symbols, Entrez IDs and Ensembl gen IDs
+ensembl <- useEnsembl(biomart = "ensembl",dataset = "hsapiens_gene_ensembl")
+convert <- getBM(attributes=c("ensembl_gene_id","entrezgene_id","external_gene_name"),
+                 filters=c("ensembl_gene_id"), 
+                 values=DEGs$ensembl_gene_id,
+                 mart = ensembl)
+#Connects to the Ensembl database to retrieve entrezgene_id and 
+#external_gene_name for each gene in DEGs.
+#convert will store these mappings.
+#merge() aligns DEG data with the convert mappings by ensembl_gene_id
+DEGs <- merge(DEGs,convert)
+DEGs <- DEGs[which(!is.na(DEGs$entrezgene_id)),]
+DEGs <- DEGs[-which(duplicated(DEGs$entrezgene_id)),]
+up_DEGs <- merge(up_DEGs,convert)
+up_DEGs <- up_DEGs[which(!is.na(up_DEGs$entrezgene_id)),]
+up_DEGs <- up_DEGs[-which(duplicated(up_DEGs$entrezgene_id)),]
+down_DEGs <- merge(down_DEGs,convert)
+down_DEGs <- down_DEGs[which(!is.na(down_DEGs$entrezgene_id)),]
+down_DEGs <- down_DEGs[-which(duplicated(down_DEGs$entrezgene_id)),]
+
+### GSEA analysis
+
+## Create vector with ranks
+ranks <- DEGs$logFC
+ranks <- sort(ranks,decreasing = T)
+names(ranks) <- DEGs$entrezgene_id
+head(ranks)
+barplot(sort(ranks, decreasing = T),las=3)
+#ranks is created with log fold change (log2_FC) values from DEGs, 
+#sorted in descending order.
+#names(ranks) maps the ranks to entrezgene_id
+
+### GO (Gene Ontology) analysis
+
+## Perform Gene Ontology enrichment analysis (Biological Process)
+#GO for BP on upregulated genes
+ego_BP_up <- enrichGO(gene = up_DEGs$external_gene_name,
+                   OrgDb = org.Hs.eg.db,
+                   keyType = 'SYMBOL',
+                   ont = "BP",
+                   pAdjustMethod = "BH",
+                   pvalueCutoff = 0.05,
+                   qvalueCutoff = 0.05)
+#enrichGO() performs GO enrichment for Biological Process (ont = "BP") using upregulated genes.
+#GO for BP on downregulated genes
+ego_BP_down <- enrichGO(gene = down_DEGs$external_gene_name,
+                      OrgDb = org.Hs.eg.db,
+                      keyType = 'SYMBOL',
+                      ont = "BP",
+                      pAdjustMethod = "BH",
+                      pvalueCutoff = 0.05,
+                      qvalueCutoff = 0.05)
+#show the top enriched GO terms and associated genes.
+
+## Visualize the top 10 enriched terms with a barplot 
+barplot(ego_BP_up,showCategory=10, main= "Top 10 enriched upregulated genes")
+barplot(ego_BP_down,showCategory=10, main= "Top 10 enriched downregulated genes")
+
+## Perform Gene Ontology (GO) enrichment analysis (Molecular Function)
+#GO for MF on upregulated genes
+ego_MF_up <- enrichGO(gene = up_DEGs$external_gene_name,
+                      OrgDb = org.Hs.eg.db,
+                      keyType = 'SYMBOL',
+                      ont = "MF",
+                      pAdjustMethod = "BH",
+                      pvalueCutoff = 0.05,
+                      qvalueCutoff = 0.05)
+#GO for MF on downregulated genes
+ego_MF_down <- enrichGO(gene = down_DEGs$external_gene_name,
+                        OrgDb = org.Hs.eg.db,
+                        keyType = 'SYMBOL',
+                        ont = "MF",
+                        pAdjustMethod = "BH",
+                        pvalueCutoff = 0.05,
+                        qvalueCutoff = 0.05)
+
+barplot(ego_MF_up,showCategory=10, main= "Top 10 enriched upregulated genes")
+barplot(ego_MF_down,showCategory=10, main= "Top 10 enriched downregulated genes")
+
+##WP analysis
+#WP analysis, or WikiPathways (WP) analysis, is a type of pathway enrichment 
+#analysis that uses pathways from the WikiPathways database. 
+#WikiPathways is an open-access, community-driven database where scientists 
+#can collaboratively curate and maintain biological pathways across different 
+#species. It provides a wide range of pathways, including metabolic, signaling, 
+#regulatory, and disease pathways, much like KEGG or Reactome but with the 
+#added advantage of being open and editable.
+
+#upregulated genes
+eWP_up <- enrichWP(gene = up_DEGs$entrezgene_id,
+                   organism = 'Homo sapiens',
+                   pvalueCutoff = 0.05,
+                   qvalueCutoff = 0.1)
+
+head(eWP_up, n=10)
+
+#downregulated genes
+eWP_down <- enrichWP(gene = down_DEGs$entrezgene_id,
+                   organism = 'Homo sapiens',
+                   pvalueCutoff = 0.05,
+                   qvalueCutoff = 0.1)
+
+head(eWP_up, n=10)
