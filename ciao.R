@@ -301,3 +301,22 @@ eWP_down <- enrichWP(gene = down_DEGs$entrezgene_id,
                    qvalueCutoff = 0.1)
 
 head(eWP_up, n=10)
+
+
+#-------------------------------------
+# Point 5: Visualize one pathway
+#-------------------------------------
+## Perform KEGG enrichment analysis
+eWP_KEGGS <- enrichKEGG(gene = up_DEGs$entrezgene_id,
+                  organism = 'human',
+                  pvalueCutoff = 0.05,
+                  qvalueCutoff = 0.1)
+head(eWP_KEGGS, n=20)
+#                   category              subcategory       ID
+# hsa04110 Cellular Processes    Cell growth and death hsa04110
+
+logFC <- up_DEGs$logFC
+names(logFC) <- up_DEGs$entrezgene_id 
+pathview(gene.data = logFC, 
+         pathway.id = "hsa04110", 
+         species = "human")
