@@ -1,8 +1,8 @@
 # ROMANEL PROJECT
 
-#------------------------------
+#-------------------------------
 # Point 1: Load the RData file
-#------------------------------
+#-------------------------------
 # per ketty (voi mettete il vostro path)
 load("Uterine_corpus_endometrial_carcinoma.RData")
 # raw_counts_df = contains the raw RNA-seq counts; 
@@ -30,7 +30,7 @@ r_geni_senzaId <- r_anno_df[!(geni_conId),]
 # alcuni hanno external gene name
 # li cerchiamo mediante gene name
 g_f1 <- getBM(attributes = c("ensembl_gene_id", "gene_biotype", "external_gene_name"),mart = ensembl,
-             filters = ("external_gene_name"), values = (r_geni_senzaId$external_gene_name))
+              filters = ("external_gene_name"), values = (r_geni_senzaId$external_gene_name))
 # we find 26 genes of the 838 missing but no one of this is gene coding
 # so we continue with the ones that we have (62034)
 
@@ -38,13 +38,15 @@ g_coding <- g_f[which(g_f$gene_biotype == "protein_coding"),]
 PC_r_anno <- r_anno_df[which(r_anno_df$ensembl_gene_id %in% g_coding$ensembl_gene_id),]
 PC_raw_counts <- raw_counts_df[which(row.names(raw_counts_df) %in% g_coding$ensembl_gene_id),]
 
-#-------------------------------------------
+#--------------------------------------------
 # Point 3: differential Expression Analysis
-#-------------------------------------------
-
-library(edgeR)
-library(ggplot2)
-library(pheatmap)
+#--------------------------------------------
+library("GenomicFeatures")
+library("ggplot2")
+library("stringr")
+library("tidyverse")
+library("edgeR")
+library("pheatmap")
 
 ## Filter raw counts data retaining only genes with a raw count >20 in at least 
 ## 5 Cases or 5 Control samples
@@ -65,46 +67,69 @@ filter_counts_df <- raw_counts_df[filter_vec>=repl_thr,]
 #Subset the raw counts matrix to include only genes that meet the filtering criteria
 
 # check the dimension of the filtered matrix 
-dim(filter_counts_df) 
+dim(filter_counts_df)
 
 # apply the filter on gene annotation
 filter_anno_df <- r_anno_df[rownames(filter_counts_df),] 
 #Subset the annotation data to match the filtered raw counts data
 dim(filter_anno_df)
 
+#barplot of reads for each sample
+size_df <- data.frame("sample"=colnames(filter_counts_df), 
+                      "read_millions"=colSums(filter_counts_df)/1000000) 
+
+ggplot(data=size_df,aes(sample,read_millions)) +
+  geom_bar(stat="identity",fill="indianred2",colour="indianred2",width=0.7,alpha=0.7)+
+  coord_flip()+
+  theme_bw()
+
+#boxplot of gene counts for each sample
+long_counts_df <- gather(as.data.frame(filter_counts_df), key = "sample", value = "read_number")
+
+ggplot(data=long_counts_df,aes(sample,read_number+1)) + 
+  geom_boxplot(colour="cyan4",fill="cyan4",alpha=0.7) +
+  theme_bw() +
+  scale_y_log10()
 
 ##Prepare Data for Differential Expression Analysis
 
 # create a DGRList object
-dge_l <- DGEList(counts=filter_counts_df, group=c_anno_df$condition, samples=c_anno_df, genes=filter_anno_df) 
-dge_l
+edge_l <- DGEList(counts=filter_counts_df, group=c_anno_df$condition, samples=c_anno_df, genes=filter_anno_df) 
+edge_l
 
 # normalization
-dge_n <- calcNormFactors(dge_l, method="TMM")
-dge_n
+edge_n <- calcNormFactors(edge_l, method="TMM")
+edge_n
 
 # create a cpm table (normalized expression values)
-cpm_table <- as.data.frame(round(cpm(dge_n),2))
+cpm_table <- as.data.frame(round(cpm(edge_n),2))
 head(cpm_table)
 
-group <- dge_n$samples$group 
+#boxplot after normalization
+long_cpm_df <- gather(cpm_table, key = "sample", value = "CPM")
+
+ggplot(data=long_cpm_df,aes(sample,CPM+1)) +
+  geom_boxplot(colour="orchid3",fill="orchid3",alpha=0.7)+
+  theme_bw()+
+  scale_y_log10()
+
+group <- edge_n$samples$group 
 # define the experimental design matrix
-design <- model.matrix(~0+group, data=dge_n$samples)
-colnames(design) <- levels(dge_n$samples$group)
-rownames(design) <- dge_n$samples$sample
+design <- model.matrix(~0+group, data=edge_n$samples)
+colnames(design) <- levels(edge_n$samples$group)
+rownames(design) <- edge_n$samples$sample
 design
 
 # calculate dispersion and fit with edgeR
-dge_d <- estimateDisp(dge_n, design)
-dge_f <- glmQLFit(dge_d, design) 
+edge_d <- estimateDisp(edge_n, design)
+edge_f <- glmQLFit(edge_d, design) 
 
 # definition of the contrast (conditions to be compared)
 contro <- makeContrasts("case - control", levels = design)
 
 # fit the model with generalized linear models
-edge_t <- glmQLFTest(dge_f,contrast=contro)
-DEGs <- as.data.frame(topTags(edge_t,n=20,p.value = 0.01, sort.by = "logFC"))
-DEGs <- as.data.frame(topTags(edge_t,n=20000))
+edge_t <- glmQLFTest(edge_f,contrast=contro)
+DEGs <- as.data.frame(topTags(edge_t,n=20000,p.value = 0.01, sort.by = "logFC"))
 DEGs$class <- "=" # Initialize a 'class' column to categorize genes
 DEGs$class[which(DEGs$logCPM > 1 & DEGs$logFC > 1.5 & DEGs$FDR < 0.01)] <- "+"  # Up-regulated
 DEGs$class[which(DEGs$logCPM > 1 & DEGs$logFC < (-1.5) & DEGs$FDR < 0.01)] <- "-"  # Down-regulated
@@ -122,7 +147,7 @@ DEGs$neg_log10_FDR <- -log10(DEGs$FDR)
 # Create a volcano plot 
 volcano_plot <- ggplot(DEGs, aes(x = logFC, y = neg_log10_FDR, color = class)) +
   geom_point(alpha = 0.6, size = 1.5) +  # Points with transparency and size
-  scale_color_manual(values = c("=" = "grey", "+" = "red", "-" = "blue")) + 
+  scale_color_manual(values = c("=" = "grey", "+" = "tomato3", "-" = "forestgreen")) + 
   labs(
     title = "Volcano Plot of Differential Expression",
     x = "Log2 Fold Change",
@@ -140,6 +165,8 @@ volcano_plot <- ggplot(DEGs, aes(x = logFC, y = neg_log10_FDR, color = class)) +
 print(volcano_plot)
 
 ##Heatmap
-#...
-
-
+cols <- cols <- c(ifelse(c_anno_df$condition == "case", "sienna2", "goldenrod1")) 
+pal <- c("forestgreen","white","tomato3") 
+pal <- colorRampPalette(pal)(100)
+heatmap(as.matrix(cpm_table[which(rownames(cpm_table)%in%DEGs$ensembl_gene_id[which(DEGs$class!="=")]),]),
+        ColSideColors = cols,cexCol = 0.5,margins = c(4,4),col=pal,cexRow = 0.2)
