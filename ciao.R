@@ -193,6 +193,15 @@ write.table(DEGs,file="DEGs.txt",row.names=F,col.names=T,sep="\t",quote=F)
 ##Instead of evaluating individual genes separately, GSEA assesses entire groups 
 ##of genes that are functionally related, such as those involved in a particular 
 ##pathway or biological process.
+library(fgsea)
+library(org.Hs.eg.db)
+library(biomaRt)
+library(clusterProfiler)
+library(enrichplot)
+library(ggnewscale)
+library(DOSE)
+library(pathview)
+library(tidyverse)
 
 ### Load results of DEG (differentially expressed genes) analysis
 DEGs <- read.table("DEGs.txt",header=T,sep="\t",as.is=T)
