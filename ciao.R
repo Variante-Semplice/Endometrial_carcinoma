@@ -354,3 +354,18 @@ names(genes) <- df$external_gene_name[match(genes$gene_id,df$entrezgene_id)]
 
 x <- promoters(genes,upstream = 500,downstream = 0)[c('TP53','RB1')]
 seq <- getSeq(BSgenome.Hsapiens.UCSC.hg38,x) 
+
+# da controllare
+# Calculating motif enrichment scores
+library(MotifDb)   #Provides access to a curated collection of DNA sequence motifs.
+library(seqLogo)   #Used for creating sequence logo plots.
+library(PWMEnrich) #Offers functions for motif enrichment analysis.
+library(PWMEnrich.Hsapiens.background)
+data(PWMLogn.hg19.MotifDb.Hsap)
+# seq <- lapply(seq, function(x) DNAString(x))
+res = motifEnrichment(seq,PWMLogn.hg19.MotifDb.Hsap,score = "affinity")
+report = sequenceReport(res, 1)
+report
+plot(report[report$p.value < 0.01], fontsize=7, id.fontsize=6)
+plot(report[1:3])
+# da controllare se è come quello di serena
