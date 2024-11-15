@@ -329,3 +329,28 @@ names(logFC) <- up_DEGs$entrezgene_id
 pathview(gene.data = logFC, 
          pathway.id = "hsa04110", 
          species = "human")
+
+#-----------------------------------------------------------
+# Point 6: which transcription factors have enriched scores
+#-----------------------------------------------------------
+library(biomaRt)
+library(MotifDb)
+library(seqLogo)
+library(PWMEnrich)
+library(PWMEnrich.Hsapiens.background)
+
+# finding promoter sequences
+# BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene") 
+# BiocManager::install("BSgenome.Hsapiens.UCSC.hg38") 
+
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+library(BSgenome.Hsapiens.UCSC.hg38)
+
+genes <- genes(TxDb.Hsapiens.UCSC.hg38.knownGene)
+ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+df <- getBM(attributes = c("external_gene_name",'entrezgene_id'),
+            values=names(genes),filters ='entrezgene_id', mart = ensembl)
+names(genes) <- df$external_gene_name[match(genes$gene_id,df$entrezgene_id)]
+
+x <- promoters(genes,upstream = 500,downstream = 0)[c('TP53','RB1')]
+seq <- getSeq(BSgenome.Hsapiens.UCSC.hg38,x) 
