@@ -440,3 +440,52 @@ head(genes_id)
 #------------------------------------
 #Use STRING database to find PPI interactions among differentially expressed 
 #genes and export the network in TSV format. 
+library(igraph)
+library(tidyr)
+library(biomaRt)
+
+write.table(unique(up_DEGs$external_gene_name),sep = '\t', file = 'PPI_up_DEGs.txt',row.names = F, 
+            col.names = F, quote = T)
+
+links <- read.delim("9606.protein.links.v12.0.txt") # TSV data downloaded from STRING webpage 
+#(dovete scaricarlo da STRING perchè è troppo pesante per git)
+UP__DEGs <- read.table("PPI_up_DEGs.txt")
+
+split_links <- strsplit(links$protein1.protein2.combined_score, " ")
+links <- do.call(rbind, split_links) #ci mette un botto
+colnames(links) <- c("protein1", "protein2", "combined_score")
+
+# Convert to data frame and fix data types
+links <- as.data.frame(links, stringsAsFactors = FALSE)
+
+#--------------------
+# Point 10: Network
+#--------------------
+# Import the network in R and using igraph package identify and plot the largest 
+#connected component.  
+
+ensembl <- useMart(biomart="ensembl",dataset="hsapiens_gene_ensembl")
+nodes <- getBM(attributes=c("external_gene_name","ensembl_gene_id","description","gene_biotype","start_position","end_position","chromosome_name","strand"),
+               filters=c("external_gene_name"), 
+               UP__DEGs[,1],
+               mart = ensembl)
+nodes = unique(nodes[,c(1,3:6)])
+
+#credo ci sia qualcosa che non debba essere cosi
+duplicated_nodes <- nodes[duplicated(nodes[, 1]), ]
+print(duplicated_nodes)
+nodes <- nodes[!duplicated(nodes[, 1]), ]
+
+## Create the network
+#NON FUNZIONA
+#MI SONO STUFATA DI PROVARE COSE
+#CI RIPROVO DOMANI
+#CIAO
+net <- graph_from_data_frame(d=links,vertices=nodes,directed=FALSE) 
+class(net)
+net
+
+plot(net) 
+
+#identify and plot the largest connected component.
+#...da fare...
