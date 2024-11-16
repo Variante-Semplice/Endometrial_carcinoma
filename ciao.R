@@ -262,21 +262,21 @@ barplot(sort(ranks, decreasing = T),las=3)
 ## Perform Gene Ontology enrichment analysis (Biological Process)
 #GO for BP on upregulated genes
 ego_BP_up <- enrichGO(gene = up_DEGs$external_gene_name,
-                   OrgDb = org.Hs.eg.db,
-                   keyType = 'SYMBOL',
-                   ont = "BP",
-                   pAdjustMethod = "BH",
-                   pvalueCutoff = 0.05,
-                   qvalueCutoff = 0.05)
-#enrichGO() performs GO enrichment for Biological Process (ont = "BP") using upregulated genes.
-#GO for BP on downregulated genes
-ego_BP_down <- enrichGO(gene = down_DEGs$external_gene_name,
                       OrgDb = org.Hs.eg.db,
                       keyType = 'SYMBOL',
                       ont = "BP",
                       pAdjustMethod = "BH",
                       pvalueCutoff = 0.05,
                       qvalueCutoff = 0.05)
+#enrichGO() performs GO enrichment for Biological Process (ont = "BP") using upregulated genes.
+#GO for BP on downregulated genes
+ego_BP_down <- enrichGO(gene = down_DEGs$external_gene_name,
+                        OrgDb = org.Hs.eg.db,
+                        keyType = 'SYMBOL',
+                        ont = "BP",
+                        pAdjustMethod = "BH",
+                        pvalueCutoff = 0.05,
+                        qvalueCutoff = 0.05)
 #show the top enriched GO terms and associated genes.
 
 ## Visualize the top 10 enriched terms with a barplot 
@@ -323,9 +323,9 @@ head(eWP_up, n=10)
 
 #downregulated genes
 eWP_down <- enrichWP(gene = down_DEGs$entrezgene_id,
-                   organism = 'Homo sapiens',
-                   pvalueCutoff = 0.05,
-                   qvalueCutoff = 0.1)
+                     organism = 'Homo sapiens',
+                     pvalueCutoff = 0.05,
+                     qvalueCutoff = 0.1)
 
 head(eWP_up, n=10)
 
@@ -335,9 +335,9 @@ head(eWP_up, n=10)
 #-------------------------------------
 ## Perform KEGG enrichment analysis
 eWP_KEGGS <- enrichKEGG(gene = up_DEGs$entrezgene_id,
-                  organism = 'human',
-                  pvalueCutoff = 0.05,
-                  qvalueCutoff = 0.1)
+                        organism = 'human',
+                        pvalueCutoff = 0.05,
+                        qvalueCutoff = 0.1)
 head(eWP_KEGGS, n=20)
 #                   category              subcategory       ID
 # hsa04110 Cellular Processes    Cell growth and death hsa04110
@@ -348,9 +348,9 @@ pathview(gene.data = logFC,
          pathway.id = "hsa04110", 
          species = "human")
 
-#-----------------------------------------------------------
-# Point 6: which transcription factors have enriched scores
-#-----------------------------------------------------------
+#------------------------------------
+# Point 6: Identifying enriched TFs
+#------------------------------------
 library(biomaRt)
 library(MotifDb)
 library(seqLogo)
@@ -373,20 +373,17 @@ names(genes) <- df$external_gene_name[match(genes$gene_id,df$entrezgene_id)]
 x <- promoters(genes,upstream = 500,downstream = 0)[c('TP53','RB1')]
 seq <- getSeq(BSgenome.Hsapiens.UCSC.hg38,x) 
 
-# da controllare
 # Calculating motif enrichment scores
 library(MotifDb)   #Provides access to a curated collection of DNA sequence motifs.
 library(seqLogo)   #Used for creating sequence logo plots.
 library(PWMEnrich) #Offers functions for motif enrichment analysis.
 library(PWMEnrich.Hsapiens.background)
 data(PWMLogn.hg19.MotifDb.Hsap)
-# seq <- lapply(seq, function(x) DNAString(x))
 res = motifEnrichment(seq,PWMLogn.hg19.MotifDb.Hsap,score = "affinity")
 report = sequenceReport(res, 1)
 report
 plot(report[report$p.value < 0.01], fontsize=7, id.fontsize=6)
 plot(report[1:3])
-# da controllare se è come quello di serena
 
 #----------------------------------
 # Point 7: PWM from MotifDB
@@ -396,20 +393,32 @@ plot(report[1:3])
 # for all of them the distribution (log2) threshold cutoff at 99.75% 
 # (relax the threshold if needed)
 # ho usato tp63 perchè sembrava un bel nome ma potremmo sceglierne altri
+library(MotifDb)
+library(seqLogo)
+library(PWMEnrich)
+library(PWMEnrich.Hsapiens.background)
+
 mdb.human.tp63 = subset(MotifDb, organism=='Hsapiens' & geneSymbol=="TP63")
 motifs = as.list(mdb.human.tp63)
 length((mdb.human.tp63))
-pwms = sapply(as.list(mdb.human.tp63),toPWM)
+pwms <- lapply(motifs, toPWM)
 ecdf = motifEcdf(pwms,organism = "hg19",quick=TRUE)
-threshold <- list()
-for (el in ecdf) 
-  threshold <- c(threshold,log2(quantile(el, 0.9975)))
-threshold
+# Initialize an empty list to store threshold values
+thresholds <- numeric()
+# Loop through each eCDF and calculate the 99.75% threshold in log2 scale
+for (ecdf in ecdf) {
+  # Calculate the 99.75 percentile threshold and take log2
+  threshold <- log2(quantile(ecdf, 0.9975))
+  # Store the threshold
+  thresholds <- c(thresholds, threshold)
+}
+# Display thresholds
+thresholds
 
+#a Michela non funzionano queste due righe
 scores = motifScores(seq,PWM,raw.score=TRUE)
-plotMotifScores(scores,sel.motifs="CREB1_HUMAN.H10MO.A",cols=c("red","green","blue"),cutoff=0.9975)
-# non sono certa di aver fatto ""compute the empirical distributions of 
-# scores for all PWMs that you find in MotifDB for the selected TF
+plotMotifScores(scores,sel.motifs="CREB1_HUMAN.H10MO.A",cols=c("red","green","blue"),cutoff=0.9975) 
+#il nome del 'motifs' credo vada cambiato con uno che abbiamo noi
 
 #----------------------------------
 # Point 8: PWM from MotifDB
@@ -418,3 +427,16 @@ plotMotifScores(scores,sel.motifs="CREB1_HUMAN.H10MO.A",cols=c("red","green","bl
 # (defined as previously) with binding scores above the computed thresholds for 
 # any of the previously selected PWMs. Use pattern matching as done during the course;
 
+#non so se è giusto
+scores = motifScores(seq, pwms, raw.scores = FALSE, verbose = FALSE, cutoff = threshold)
+highscore_seq <- which(apply(scores,1,sum)>0)
+genes_id <- up_DEGs[highscore_seq,]
+
+dim(genes_id)
+head(genes_id)
+
+#------------------------------------
+# Point 9: PPI interaction analysis
+#------------------------------------
+#Use STRING database to find PPI interactions among differentially expressed 
+#genes and export the network in TSV format. 
