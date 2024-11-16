@@ -3,7 +3,6 @@
 #-------------------------------
 # Point 1: Load the RData file
 #-------------------------------
-# per ketty (voi mettete il vostro path)
 load("Uterine_corpus_endometrial_carcinoma.RData")
 # raw_counts_df = contains the raw RNA-seq counts; 
 # c_anno_df = contains sample names and conditions (case or control); 
@@ -12,23 +11,32 @@ load("Uterine_corpus_endometrial_carcinoma.RData")
 #-----------------------------------------------
 # Point 2: extracting only protein coding genes
 #-----------------------------------------------
-# we need to find which genes are coding, add a new column?
+# Use biomaRt package to retrieve the needed information; 
+# Next tasks should use the new data-frames you have created. 
+
 library(biomaRt)
-# human genes dataset
+# connecting to the human genes dataset
 ensembl <- useMart(biomart="ensembl",dataset="hsapiens_gene_ensembl")
+# have a look at the possible attributes
 attributes <- listAttributes(ensembl)
 # Find function for all genes 
-length(unique(r_anno_df$ensembl_gene_id)) # unique IDs
-g_f <- getBM(attributes = c("ensembl_gene_id", "gene_biotype", "external_gene_name"),mart = ensembl,
-             filters = ("ensembl_gene_id"), values = (r_anno_df$ensembl_gene_id))
+length(unique(r_anno_df$ensembl_gene_id)) 
+# we have unique IDs in our dataset, good
+g_f <- getBM(attributes = c("ensembl_gene_id", "gene_biotype", "external_gene_name"),
+             mart = ensembl, filters = ("ensembl_gene_id"), 
+             values = (r_anno_df$ensembl_gene_id))
+# g_f contains ID, biotype and gene name of the genes in r_anno_df
 
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 # mancano degli id ho solo 62034 elementi dei 62872
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# we try to find the missing genes with external name
 geni_conId <-  r_anno_df$ensembl_gene_id %in%  g_f$ensembl_gene_id
+# TRUE/FALSE indexes of genes that we found
 r_geni_senzaId <- r_anno_df[!(geni_conId),]
-# alcuni hanno external gene name
-# li cerchiamo mediante gene name
+# table of not found genes
+# some do have the external gene name
+# we try to find them in ensembl via  gene name
 g_f1 <- getBM(attributes = c("ensembl_gene_id", "gene_biotype", "external_gene_name"),mart = ensembl,
               filters = ("external_gene_name"), values = (r_geni_senzaId$external_gene_name))
 # we find 26 genes of the 838 missing but no one of this is gene coding
@@ -37,10 +45,15 @@ g_f1 <- getBM(attributes = c("ensembl_gene_id", "gene_biotype", "external_gene_n
 g_coding <- g_f[which(g_f$gene_biotype == "protein_coding"),]
 PC_r_anno <- r_anno_df[which(r_anno_df$ensembl_gene_id %in% g_coding$ensembl_gene_id),]
 PC_raw_counts <- raw_counts_df[which(row.names(raw_counts_df) %in% g_coding$ensembl_gene_id),]
+# we filter all the dataframes to keep only the coding genes
 
 #--------------------------------------------
 # Point 3: differential Expression Analysis
 #--------------------------------------------
+# Perform a differential expression analysis using edgeR package and select up- 
+# and down-regulated genes using an adjusted p-value cutoff of 0.01, a log fold 
+# change ratio >1.5 for up-regulated genes and < (-1.5) for down-regulated genes 
+# and a log CPM >1. Relax the thresholds if no or few results are available.  
 library("GenomicFeatures")
 library("ggplot2")
 library("stringr")
@@ -66,11 +79,12 @@ filter_vec <- apply(raw_counts_df,1,
 table(filter_vec)
 
 filter_counts_df <- raw_counts_df[filter_vec>=repl_thr,] 
+# filter_vec is a vector with the genes and the number of replicates? for each
 #Subset the raw counts matrix to include only genes that meet the filtering criteria
 
 # check the dimension of the filtered matrix 
 dim(filter_counts_df)
-# we keep 25557 genes
+# we keep 25557 genes of the 62872
 
 # apply the filter on gene annotation
 filter_anno_df <- r_anno_df[rownames(filter_counts_df),] 
@@ -78,6 +92,7 @@ filter_anno_df <- r_anno_df[rownames(filter_counts_df),]
 dim(filter_anno_df)
 
 #barplot of reads for each sample
+# one column with the sample and one with total reads of that sample
 size_df <- data.frame("sample"=colnames(filter_counts_df), 
                       "read_millions"=colSums(filter_counts_df)/1000000) 
 
@@ -86,8 +101,9 @@ ggplot(data=size_df,aes(sample,read_millions)) +
   coord_flip()+
   theme_bw()
 
-#boxplot of gene counts for each sample
+# boxplot of gene counts for each sample
 long_counts_df <- gather(as.data.frame(filter_counts_df), key = "sample", value = "read_number")
+# we put in a column the all the cells of the matrix and in the other the # of reads
 
 ggplot(data=long_counts_df,aes(sample,read_number+1)) + 
   geom_boxplot(colour="cyan4",fill="cyan4",alpha=0.7) +
@@ -97,8 +113,10 @@ ggplot(data=long_counts_df,aes(sample,read_number+1)) +
 ##Prepare Data for Differential Expression Analysis
 
 # create a DGRList object
-edge_l <- DGEList(counts=filter_counts_df, group=c_anno_df$condition, samples=c_anno_df, genes=filter_anno_df) 
+edge_l <- DGEList(counts=filter_counts_df, group=c_anno_df$condition, 
+                  samples=c_anno_df, genes=filter_anno_df) 
 edge_l
+# we put togheter reads, gene and sample infos
 
 # normalization
 edge_n <- calcNormFactors(edge_l, method="TMM")
@@ -369,3 +387,34 @@ report
 plot(report[report$p.value < 0.01], fontsize=7, id.fontsize=6)
 plot(report[1:3])
 # da controllare se è come quello di serena
+
+#----------------------------------
+# Point 7: PWM from MotifDB
+#----------------------------------
+# Select one among the top enriched TFs, compute the empirical distributions of 
+# scores for all PWMs that you find in MotifDB for the selected TF and determine 
+# for all of them the distribution (log2) threshold cutoff at 99.75% 
+# (relax the threshold if needed)
+# ho usato tp63 perchè sembrava un bel nome ma potremmo sceglierne altri
+mdb.human.tp63 = subset(MotifDb, organism=='Hsapiens' & geneSymbol=="TP63")
+motifs = as.list(mdb.human.tp63)
+length((mdb.human.tp63))
+pwms = sapply(as.list(mdb.human.tp63),toPWM)
+ecdf = motifEcdf(pwms,organism = "hg19",quick=TRUE)
+threshold <- list()
+for (el in ecdf) 
+  threshold <- c(threshold,log2(quantile(el, 0.9975)))
+threshold
+
+scores = motifScores(seq,PWM,raw.score=TRUE)
+plotMotifScores(scores,sel.motifs="CREB1_HUMAN.H10MO.A",cols=c("red","green","blue"),cutoff=0.9975)
+# non sono certa di aver fatto ""compute the empirical distributions of 
+# scores for all PWMs that you find in MotifDB for the selected TF
+
+#----------------------------------
+# Point 8: PWM from MotifDB
+#----------------------------------
+# Identify which up-regulated genes have a region in their promoter 
+# (defined as previously) with binding scores above the computed thresholds for 
+# any of the previously selected PWMs. Use pattern matching as done during the course;
+
