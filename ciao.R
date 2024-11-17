@@ -9,7 +9,7 @@ load("Uterine_corpus_endometrial_carcinoma.RData")
 # r_ anno_df = contains the ENSEMBL genes ids, the length of the genes and the genes symbols. 
 
 #-----------------------------------------------
-# Point 2: extracting only protein coding genes
+# Point 2: Extracting only protein coding genes
 #-----------------------------------------------
 # Use biomaRt package to retrieve the needed information; 
 # Next tasks should use the new data-frames you have created. 
@@ -48,7 +48,7 @@ PC_raw_counts <- raw_counts_df[which(row.names(raw_counts_df) %in% g_coding$ense
 # we filter all the dataframes to keep only the coding genes
 
 #--------------------------------------------
-# Point 3: differential Expression Analysis
+# Point 3: Differential Expression Analysis
 #--------------------------------------------
 # Perform a differential expression analysis using edgeR package and select up- 
 # and down-regulated genes using an adjusted p-value cutoff of 0.01, a log fold 

@@ -9,20 +9,30 @@ date: '`r Sys.Date()`'
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## 1. Load data
+# Introduction
+In the present report, RNA-seq count data extracted from different 
+cancer datasets from the Cancer Genome Atlas (TCGA) were analyzed. Data is split between tumor and control samples. In particular, data used for this study derived from **uterine corpus endometrial carcinoma cells**. 
 
+# Analysis
+
+## 1. Load data
 ```{r data}
 load("Uterine_corpus_endometrial_carcinoma.RData")
 ```
+The loaded file includes:
+
+-   `raw_counts_df`: contains the raw RNA-seq counts; 
+
+-   `c_anno_df`: contains sample names and conditions (case or control);
+
+-   `r_ anno_df`: contains the ENSEMBL genes ids, the length of the genes and the genes symbols. 
 
 ## 2. Extract protein coding genes
-
-```{r, results='hide', message=FALSE, warning=FALSE}
+It is preferable to focus the analysis on protein-coding genes only. To do so, it is used the `biomaRt` package. `biomaRt` provides tools for querying the ENSEMBL database to retrieve genomic annotations.
+```{r biomart, results='hide', message=FALSE, warning=FALSE}
 library(biomaRt)
 ```
-
-
-```{r}
+```{r PCG}
 ensembl <- useMart(biomart="ensembl",dataset="hsapiens_gene_ensembl")
 attributes <- listAttributes(ensembl)
 g_f <- getBM(attributes = c("ensembl_gene_id", "gene_biotype",
@@ -34,10 +44,20 @@ g_coding <- g_f[which(g_f$gene_biotype == "protein_coding"),]
 PC_r_anno <- r_anno_df[which(r_anno_df$ensembl_gene_id %in% g_coding$ensembl_gene_id),]
 PC_raw_counts <- raw_counts_df[which(row.names(raw_counts_df) %in% g_coding$ensembl_gene_id),]
 ```
+`g_f` contains ID, biotype and gene name of the genes in `r_anno_df`. Finally, all the dataframes were filtered to keep only the coding genes.
 
 ## 3. Differential Expression Analysis
+**Differential Expression Analysis (DEA)** identifies genes that show statistically significant differences in expression levels between two or more conditions (cases and controls). 
+This analysis helps to:
 
-```{r, results='hide', message=FALSE, warning=FALSE}
+-   Identify biomarkers or genes of interest involved in specific conditions.
+
+-   Explore biological pathways and mechanisms.
+
+-   Validate hypotheses in experimental biology and drug discovery.
+
+Differential Expression analysis is here performed using `edgeR` package.
+```{r libraries, results='hide', message=FALSE, warning=FALSE}
 library("GenomicFeatures")
 library("ggplot2")
 library("stringr")
@@ -45,29 +65,30 @@ library("tidyverse")
 library("edgeR")
 library("pheatmap")
 ```
-
-```{r, results='hide', message=FALSE, warning=FALSE}
-count_thr <- 20
-repl_thr <- 5
+Firstly, a threshold was set for the raw count and the number of replicates.
+```{r threshold, results='hide', message=FALSE, warning=FALSE}
+count_thr <- 20 #minimum read count threshold
+repl_thr <- 5 #minimum number of replicates threshold
 
 filter_vec <- apply(raw_counts_df,1,
-                    function(y) max(by(y, c_anno_df$condition, 
-                                       function(x) sum(x>=count_thr))))
+                    function(y)max(by(y,c_anno_df$condition,
+                                      function(x) sum(x>=count_thr))))
 ```
-
-```{r}
+Such filters were then applied to the dataframes.
+```{r filtering}
 #statistics for the filtering
 table(filter_vec)
 
 filter_counts_df <- raw_counts_df[filter_vec>=repl_thr,] 
-dim(filter_counts_df)
-
-# apply the filter on gene annotation
-filter_anno_df <- r_anno_df[rownames(filter_counts_df),] 
-dim(filter_anno_df)
+filter_anno_df <- r_anno_df[rownames(filter_counts_df),]
 ```
-
-```{r, echo=FALSE}
+```{r dimension}
+#check dimension consistency
+dim(filter_anno_df)
+dim(filter_counts_df)
+```
+To check for uniformity in sequencing depth across samples, it is useful to visualize the library size of each sample:
+```{r barplot, echo=FALSE, fig.cap="**Fig. 1** Barplot of total number of reads for each sample.", fig.align='center'}
 #barplot of reads for each sample
 size_df <- data.frame("sample"=colnames(filter_counts_df), 
                       "read_millions"=colSums(filter_counts_df)/1000000) 
@@ -77,9 +98,9 @@ ggplot(data=size_df,aes(sample,read_millions)) +
   coord_flip()+
   theme_bw()
 ```
-
-
-```{r, echo=FALSE}
+It might also be useful to visualize the variability in expression among samples.
+From the following boxplot it is clear that data need to be normalized before proceeding with DEA.
+```{r boxplot1, echo=FALSE, fig.cap="**Fig. 2** Boxplot of variability among samples (before normalization).", fig.align='center'}
 #boxplot of gene counts for each sample
 long_counts_df <- gather(as.data.frame(filter_counts_df), key = "sample", value = "read_number")
 
@@ -88,9 +109,12 @@ ggplot(data=long_counts_df,aes(sample,read_number+1)) +
   theme_bw() +
   scale_y_log10()
 ```
+Firstly we created a `DGEList` object: it contains information about count data (`filter_counts_df`), conditions (`c_anno_df$condition`), and gene annotations (`filter_anno_df`) and it is used by `edgeR` for normalization.
 
+Secondly, in order to apply intra- and inter-sample normalization, the function `calcNormFactors` was called while specifying the TMM (Trimmed Mean of M-values) method. In this way, the function calculates the scaling factor based on the library size.
 
-```{r}
+Lastly, normalized counts were converted to counts-per-million (CPM).
+```{r normalization}
 ##Prepare Data for Differential Expression Analysis
 
 # create a DGRList object
@@ -102,8 +126,8 @@ edge_n <- calcNormFactors(edge_l, method="TMM")
 # create a cpm table (normalized expression values)
 cpm_table <- as.data.frame(round(cpm(edge_n),2))
 ```
-
-```{r, echo=FALSE}
+By looking at the following boxplot it is possible to assess the effect of normalization on data: the distributions of the single samples are now comparable; normalization has reduced bias in expression distributions.
+```{r boxplot2, echo=FALSE, fig.cap="**Fig. 3** Boxplot after normalization.", fig.align='center'}
 #boxplot after normalization
 long_cpm_df <- gather(cpm_table, key = "sample", value = "CPM")
 
@@ -112,31 +136,95 @@ ggplot(data=long_cpm_df,aes(sample,CPM+1)) +
   theme_bw()+
   scale_y_log10()
 ```
-
-```{r}
+It is now possible to proceed with Differential Expression Analysis.
+An experimental design matrix is defined based on case and control conditions.
+```{r des matr}
 group <- edge_n$samples$group 
 # define the experimental design matrix
 design <- model.matrix(~0+group, data=edge_n$samples)
 colnames(design) <- levels(edge_n$samples$group)
 rownames(design) <- edge_n$samples$sample
-
+```
+The `estimateDisp` function estimates variability (dispersion) for each gene across replicates. Data is then fitted using `glmQFLFIT`.
+```{r dispersion}
 # calculate dispersion and fit with edgeR
 edge_d <- estimateDisp(edge_n, design)
-edge_f <- glmQLFit(edge_d, design) 
-
+edge_f <- glmQLFit(edge_d, design)
+```
+With `contro` the comparison between case and control was defined.
+```{r contro}
 # definition of the contrast (conditions to be compared)
 contro <- makeContrasts("case - control", levels = design)
-
-# fit the model with generalized linear models
+```
+The function `glmQLFTest` was called to perform the statistical test for differential expression following the given comparison (`contro`). The result was sorted by the logarithm of the fold change and a cutoff on the p-value was applied.
+```{r fit}
+#Fit the model with generalized linear models
 edge_t <- glmQLFTest(edge_f,contrast=contro)
 DEGs <- as.data.frame(topTags(edge_t,n=20000,p.value = 0.01, sort.by = "logFC"))
+```
+For keeping track of the fold change of each gene, a new column (“class”) was added to the dataframe, containing either “+”, “-” or “=”.
+DEGs were then filtered for significance (FDR < 0.01) and categorized into:
+-   "+": Up-regulated (logFC > 1.5).
+-   "-": Down-regulated (logFC < -1.5).
+-   "=": Not significantly different
+```{r DEGs}
 DEGs$class <- "=" # Initialize a 'class' column to categorize genes
 DEGs$class[which(DEGs$logCPM > 1 & DEGs$logFC > 1.5 & DEGs$FDR < 0.01)] <- "+"  # Up-regulated
 DEGs$class[which(DEGs$logCPM > 1 & DEGs$logFC < (-1.5) & DEGs$FDR < 0.01)] <- "-"  # Down-regulated
 
 # Sort the DEGs by log fold-change in descending order
 DEGs <- DEGs[order(DEGs$logFC,decreasing = T),]
-
+```
+In the following table are reported the counts of up-regulated, down-regulated, and neutral genes.
+```{r table DEGs, echo=FALSE}
 table(DEGs$class)
 ```
+The results of the differential expression analysis underlined the down-regulation of 1394 genes and the up-regulation of 1418 genes, while the remaining 9855 genes are not subjected to differential expression in this case.
 
+A volcano plot is commonly used to display data from differential expression analysis because it effectively combines statistical significance and biological relevance in a single visualization. On the x-axis we find the log fold change while on the y axis the p-value; the vertical dashed lines represent the fold-change thresholds (logFC > 1.5 or < -1.5). 
+The most significant DEGs are represented by the colored dots: green for the down-regulated genes and red for the up-regulated ones respectively.
+```{r volcano, echo=FALSE, fig.cap="**Fig. 4** Volcano plot.", fig.align='center'}
+## Volcano plot
+# Add a column for -log10(FDR) for plotting purposes
+DEGs$neg_log10_FDR <- -log10(DEGs$FDR)
+
+# Create a volcano plot 
+volcano_plot <- ggplot(DEGs, aes(x = logFC, y = neg_log10_FDR, color = class)) +
+  geom_point(alpha = 0.6, size = 1.5) +  # Points with transparency and size
+  scale_color_manual(values = c("=" = "grey", "+" = "tomato3", "-" = "forestgreen")) + 
+  labs(
+    title = "Volcano Plot of Differential Expression",
+    x = "Log2 Fold Change",
+    y = "-Log10 Adjusted P-Value (FDR)"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5, size = 16),
+    axis.title = element_text(size = 14)
+  ) +
+  geom_hline(yintercept = -log10(0.01), linetype = "dashed", color = "black") +  # FDR threshold line
+  geom_vline(xintercept = c(-1.5, 1.5), linetype = "dashed", color = "black")    # Fold-change thresholds
+
+print(volcano_plot)
+```
+Heatmaps are essential for visualizing and interpreting expression data in differential analysis. Heatmaps display expression levels of genes across multiple samples. Hierarchical clustering is exploited to group together samples based on their similarity. The data was filtered to focus only on up- and down regulated genes (differentially expressed genes). 
+```{r heatmap, echo=FALSE, fig.cap="**Fig. 5** Heatmap.", fig.align='center'}
+##Heatmap
+cols <- cols <- c(ifelse(c_anno_df$condition == "case", "sienna2", "goldenrod1")) 
+pal <- c("forestgreen","white","tomato3") 
+pal <- colorRampPalette(pal)(100)
+
+heatmap(as.matrix(cpm_table[which(rownames(cpm_table)%in%DEGs$ensembl_gene_id[which(DEGs$class!="=")]),]),
+        ColSideColors = cols,cexCol = 0.5,margins = c(4,4),col=pal,cexRow = 0.2)
+```
+The clustering process managed to separate almost perfectly the cases (red) from the controls (yellow).
+```{r text file, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+## Export differentially expressed genes in a text file
+up_DEGs <- DEGs[which(DEGs$class=="+"),]
+down_DEGs <- DEGs[which(DEGs$class=="-"),]
+
+write.table(up_DEGs,file="up_DEGs.txt",row.names=F,col.names=T,sep="\t",quote=F)
+write.table(down_DEGs,file="down_DEGs.txt",row.names=F,col.names=T,sep="\t",quote=F)
+write.table(DEGs,file="DEGs.txt",row.names=F,col.names=T,sep="\t",quote=F)
+```
