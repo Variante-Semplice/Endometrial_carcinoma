@@ -4,9 +4,6 @@
 # Point 1: Load the RData file
 #-------------------------------
 load("Uterine_corpus_endometrial_carcinoma.RData")
-# raw_counts_df = contains the raw RNA-seq counts; 
-# c_anno_df = contains sample names and conditions (case or control); 
-# r_ anno_df = contains the ENSEMBL genes ids, the length of the genes and the genes symbols. 
 
 #-----------------------------------------------
 # Point 2: Extracting only protein coding genes
@@ -341,6 +338,7 @@ eWP_KEGGS <- enrichKEGG(gene = up_DEGs$entrezgene_id,
 head(eWP_KEGGS, n=20)
 #                   category              subcategory       ID
 # hsa04110 Cellular Processes    Cell growth and death hsa04110
+knitr::kable(head(eWP_KEGGS[, 1:6], n=10))
 
 logFC <- up_DEGs$logFC
 names(logFC) <- up_DEGs$entrezgene_id 
@@ -369,6 +367,10 @@ ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
 df <- getBM(attributes = c("external_gene_name",'entrezgene_id'),
             values=names(genes),filters ='entrezgene_id', mart = ensembl)
 names(genes) <- df$external_gene_name[match(genes$gene_id,df$entrezgene_id)]
+
+#serena ha fatto anche questa cosa
+#genes_name <- upDEGs$external_gene_name # List of up-regulated genes
+#intersect_names <- intersect(names(genes), genes_name) # Intersection of up-regulated genes with the database
 
 x <- promoters(genes,upstream = 500,downstream = 0)[c('TP53','RB1')]
 seq <- getSeq(BSgenome.Hsapiens.UCSC.hg38,x) 
@@ -487,5 +489,21 @@ net
 
 plot(net) 
 
-#identify and plot the largest connected component.
-#...da fare...
+## Gene-set enrichment analysis of the larger connected component
+#NON FUNZIONAAAA
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(enrichplot)
+library(ggnewscale)
+options(ggrepel.max.overlaps = Inf) 
+
+ego_BP <- enrichGO(gene = V(net.c)$name,
+                   OrgDb = org.Hs.eg.db,
+                   keyType = 'SYMBOL',
+                   ont = "BP",
+                   pAdjustMethod = "BH",
+                   pvalueCutoff = 0.05,
+                   qvalueCutoff = 0.05)
+
+x <- pairwise_termsim(ego_BP) 
+emapplot(x)
