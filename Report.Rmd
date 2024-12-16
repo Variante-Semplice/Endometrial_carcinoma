@@ -103,7 +103,6 @@ dim(filter_counts_df)
 To check for uniformity in sequencing depth across samples, it is useful to visualize the library size of each sample:
 
 ```{r barplot, echo=FALSE, fig.cap="**Fig. 1** Barplot of total number of reads for each sample.", fig.align='center'}
-#barplot of reads for each sample
 size_df <- data.frame("sample"=colnames(filter_counts_df), 
                       "read_millions"=colSums(filter_counts_df)/1000000) 
 
@@ -116,7 +115,6 @@ ggplot(data=size_df,aes(sample,read_millions)) +
 It might also be useful to visualize the variability in expression among samples. From the following boxplot it is clear that data need to be normalized before proceeding with DEA.
 
 ```{r boxplot1, echo=FALSE, fig.cap="**Fig. 2** Boxplot of variability among samples (before normalization).", fig.align='center'}
-#boxplot of gene counts for each sample
 long_counts_df <- gather(as.data.frame(filter_counts_df), key = "sample", value = "read_number")
 
 ggplot(data=long_counts_df,aes(sample,read_number+1)) + 
@@ -132,22 +130,19 @@ Secondly, in order to apply intra- and inter-sample normalization, the function 
 Lastly, normalized counts were converted to counts-per-million (CPM).
 
 ```{r normalization}
-##Prepare Data for Differential Expression Analysis
-
-# create a DGRList object
+#create a DGEList object
 edge_l <- DGEList(counts=filter_counts_df, group=c_anno_df$condition, samples=c_anno_df, genes=filter_anno_df) 
 
-# normalization
+#normalization
 edge_n <- calcNormFactors(edge_l, method="TMM")
 
-# create a cpm table (normalized expression values)
+#create a cpm table
 cpm_table <- as.data.frame(round(cpm(edge_n),2))
 ```
 
 By looking at the following boxplot it is possible to assess the effect of normalization on data: the distributions of the single samples are now comparable; normalization has reduced bias in expression distributions.
 
 ```{r boxplot2, echo=FALSE, fig.cap="**Fig. 3** Boxplot after normalization.", fig.align='center'}
-#boxplot after normalization
 long_cpm_df <- gather(cpm_table, key = "sample", value = "CPM")
 
 ggplot(data=long_cpm_df,aes(sample,CPM+1)) +
@@ -169,7 +164,6 @@ rownames(design) <- edge_n$samples$sample
 The `estimateDisp` function estimates variability (dispersion) for each gene across replicates. Data is then fitted using `glmQFLFIT`.
 
 ```{r dispersion}
-# calculate dispersion and fit with edgeR
 edge_d <- estimateDisp(edge_n, design)
 edge_f <- glmQLFit(edge_d, design)
 ```
@@ -177,7 +171,6 @@ edge_f <- glmQLFit(edge_d, design)
 With `contro` the comparison between case and control was defined.
 
 ```{r contro}
-# definition of the contrast (conditions to be compared)
 contro <- makeContrasts("case - control", levels = design)
 ```
 
@@ -198,9 +191,9 @@ For keeping track of the fold change of each gene, a new column ("class") was ad
 -   "=": Not significantly different
 
 ```{r DEGs}
-DEGs$class <- "=" # Initialize a 'class' column to categorize genes
-DEGs$class[which(DEGs$logCPM > 1 & DEGs$logFC > 1.5 & DEGs$FDR < 0.01)] <- "+"  # Up-regulated
-DEGs$class[which(DEGs$logCPM > 1 & DEGs$logFC < (-1.5) & DEGs$FDR < 0.01)] <- "-"  # Down-regulated
+DEGs$class <- "=" 
+DEGs$class[which(DEGs$logCPM > 1 & DEGs$logFC > 1.5 & DEGs$FDR < 0.01)] <- "+"  
+DEGs$class[which(DEGs$logCPM > 1 & DEGs$logFC < (-1.5) & DEGs$FDR < 0.01)] <- "-"  
 
 # Sort the DEGs by log fold-change in descending order
 DEGs <- DEGs[order(DEGs$logFC,decreasing = T),]
@@ -217,11 +210,8 @@ The results of the differential expression analysis underlined the down-regulati
 A volcano plot is commonly used to display data from differential expression analysis because it effectively combines statistical significance and biological relevance in a single visualization. On the x-axis we find the log-fold change while on the y axis the p-value; the vertical dashed lines represent the fold-change thresholds (logFC \> 1.5 or \< -1.5). The most significant DEGs are represented by the colored dots: green for the down-regulated genes and red for the up-regulated ones respectively.
 
 ```{r volcano, echo=FALSE, fig.cap="**Fig. 4** Volcano plot.", fig.align='center'}
-## Volcano plot
-# Add a column for -log10(FDR) for plotting purposes
 DEGs$neg_log10_FDR <- -log10(DEGs$FDR)
 
-# Create a volcano plot 
 volcano_plot <- ggplot(DEGs, aes(x = logFC, y = neg_log10_FDR, color = class)) +
   geom_point(alpha = 0.6, size = 1.5) +  # Points with transparency and size
   scale_color_manual(values = c("=" = "grey", "+" = "tomato3", "-" = "forestgreen")) + 
@@ -245,7 +235,6 @@ print(volcano_plot)
 Heatmaps are essential for visualizing and interpreting expression data in differential analysis. Heatmaps display expression levels of genes across multiple samples. Hierarchical clustering is exploited to group together samples based on their similarity. The data was filtered to focus only on up- and down- regulated genes (differentially expressed genes).
 
 ```{r heatmap, echo=FALSE, fig.cap="**Fig. 5** Heatmap.", fig.align='center'}
-##Heatmap
 cols <- cols <- c(ifelse(c_anno_df$condition == "case", "sienna2", "goldenrod1")) 
 pal <- c("forestgreen","white","tomato3") 
 pal <- colorRampPalette(pal)(100)
@@ -257,7 +246,6 @@ heatmap(as.matrix(cpm_table[which(rownames(cpm_table)%in%DEGs$ensembl_gene_id[wh
 The clustering process managed to separate almost perfectly the cases (red) from the controls (yellow).
 
 ```{r text file, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
-## Export differentially expressed genes in a text file
 up_DEGs <- DEGs[which(DEGs$class=="+"),]
 down_DEGs <- DEGs[which(DEGs$class=="-"),]
 
@@ -268,7 +256,7 @@ write.table(DEGs,file="DEGs.txt",row.names=F,col.names=T,sep="\t",quote=F)
 
 ## 4. Gene Set Enrichment Analysis (GSEA)
 
-**Gene Set Enrichment Analysis (GSEA)** is a statistical technique used to determine whether a predefined set of genes shows statistically significance, coordinated differences in expression under two different conditions such as "treatment" vs. "control" or "healthy" vs. "disease." Instead of evaluating individual genes separately, GSEA assesses entire groups of genes that are functionally related, such as those involved in a particular pathway or biological process.
+**Gene Set Enrichment Analysis (GSEA)** is a statistical technique used to determine whether a predefined set of genes shows statistically significance, coordinated differences in expression under two different conditions such as "treatment" vs. "control" or "healthy" vs. "disease". Instead of evaluating individual genes separately, GSEA assesses entire groups of genes that are functionally related, such as those involved in a particular pathway or biological process.
 
 Gene Set Enrichment Analysis is here done using the `clusterProfiler` package.
 
@@ -284,23 +272,21 @@ library(pathview)
 library(tidyverse)
 ```
 
-Firstly, `entrezgene_id` and `external_gene_name` were retrieved, using the `biomaRt` package, for each gene in the DEGs dataset. In `convert` these mappings will be stored and with `merge()` the Degs data is aligned to mappings in `ensembl_gene_id`.
+Firstly, `entrezgene_id` and `external_gene_name` were retrieved, using the `biomaRt` package, for each gene in the DEGs dataset. In `convert` these mappings will be stored and with `merge()` the DEGs data is aligned to mappings in `ensembl_gene_id`.
+
+```{r res_DEGs}
+# Load results of DEG
+DEGs <- read.table("DEGs.txt",header=T,sep="\t",as.is=T)
+table(DEGs$class) 
+```
 
 ```{r entrezgene_id}
-### Load results of DEG (differentially expressed genes) analysis
-DEGs <- read.table("DEGs.txt",header=T,sep="\t",as.is=T)
-table(DEGs$class) #checks the count of genes by class (upregulated, downregulated or the same)
-
-### Use biomaRt to map Gene symbols, Entrez IDs and Ensembl gen IDs
 ensembl <- useEnsembl(biomart = "ensembl",dataset = "hsapiens_gene_ensembl")
 convert <- getBM(attributes=c("ensembl_gene_id","entrezgene_id","external_gene_name"),
                  filters=c("ensembl_gene_id"), 
                  values=DEGs$ensembl_gene_id,
                  mart = ensembl)
-#Connects to the Ensembl database to retrieve entrezgene_id and 
-#external_gene_name for each gene in DEGs.
-#convert will store these mappings.
-#merge() aligns DEG data with the convert mappings by ensembl_gene_id
+
 DEGs <- merge(DEGs,convert)
 DEGs <- DEGs[which(!is.na(DEGs$entrezgene_id)),]
 DEGs <- DEGs[-which(duplicated(DEGs$entrezgene_id)),]
@@ -321,11 +307,9 @@ down_DEGs <- down_DEGs[-which(duplicated(down_DEGs$entrezgene_id)),]
 ## Create vector with ranks
 ranks <- DEGs$logFC
 ranks <- sort(ranks,decreasing = T)
-names(ranks) <- DEGs$entrezgene_id #maps the ranks to entrezgene_id
+names(ranks) <- DEGs$entrezgene_id 
 head(ranks)
 barplot(sort(ranks, decreasing = T),las=3)
-#ranks is created with log fold change (log2_FC) values from DEGs, 
-#sorted in descending order.
 ```
 Now gene set enrichment analysis for **Gene Ontology (GO)** within the biological process (`ont = "BP"`) is performed.
 GO enrichment identifies which terms are statistically overrepresented (enriched) in the given set of genes, suggesting that those genes are involved in specific biological processes.
@@ -333,8 +317,6 @@ The function `enrichGO` is used to perform gene set enrichment analysis on the l
 The outputs `ego_BP_up` and `ego_BP_down` will contain the enriched GO terms for biological processes associated with the genes.
 The results highlight which biological processes are overrepresented among up- or downregulated genes, suggesting their involvement in specific pathways or responses.
 ```{r GO_BP}
-### GO (Gene Ontology) analysis
-## Perform Gene Ontology enrichment analysis (Biological Process)
 #GO for BP on upregulated genes
 ego_BP_up <- enrichGO(gene = up_DEGs$external_gene_name,
                       OrgDb = org.Hs.eg.db,
@@ -343,7 +325,7 @@ ego_BP_up <- enrichGO(gene = up_DEGs$external_gene_name,
                       pAdjustMethod = "BH",
                       pvalueCutoff = 0.05,
                       qvalueCutoff = 0.05)
-#enrichGO() performs GO enrichment for Biological Process (ont = "BP") using upregulated genes.
+
 #GO for BP on downregulated genes
 ego_BP_down <- enrichGO(gene = down_DEGs$external_gene_name,
                         OrgDb = org.Hs.eg.db,
@@ -354,15 +336,16 @@ ego_BP_down <- enrichGO(gene = down_DEGs$external_gene_name,
                         qvalueCutoff = 0.05)
 ```
 ```{r vis_GO_up, echo=FALSE, fig.cap="**Fig. 6** Top 10 enriched upregulated genes (BP)", fig.align='center'}
-## Visualize the top 10 enriched terms with a barplot 
 barplot(ego_BP_up,showCategory=10, main= "Top 10 enriched upregulated genes")
 ```
+The upregulated genes are strongly associated with processes involved in cell division, chromosome organization, and mitosis. Enrichment related to mitosis and chromosome segregation implies that the upregulated genes are driving cell proliferation, this could lead to rapid tumor cellsproliferation. 
 ```{r vis_GO_down, echo=FALSE, fig.cap="**Fig. 7** Top 10 enriched downregulated genes (BP)", fig.align='center'}
 barplot(ego_BP_down,showCategory=10, main= "Top 10 enriched downregulated genes")
 ```
+The top enriched GO terms for the downregulated genes indicate that processes related to muscle contraction, heart function, and extracellular matrix organization are suppressed. The downregulation of these biological processes likely reflects a combination of cancer progression, systemic effects like cachexia, and disruptions in tissue structure and function. These changes are hallmarks of advanced cancer and are associated with poor outcomes such as muscle wasting, cardiac dysfunction, and metastatic potential.
+
 The same function is then applied to analyze the ontology related to molecular function (`ont = "MF"`), simply by changing the ontology parameter. Results of this functin are represented in the following barplots
 ```{r GO_MF, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
-## Perform Gene Ontology (GO) enrichment analysis (Molecular Function)
 #GO for MF on upregulated genes
 ego_MF_up <- enrichGO(gene = up_DEGs$external_gene_name,
                       OrgDb = org.Hs.eg.db,
@@ -371,6 +354,7 @@ ego_MF_up <- enrichGO(gene = up_DEGs$external_gene_name,
                       pAdjustMethod = "BH",
                       pvalueCutoff = 0.05,
                       qvalueCutoff = 0.05)
+
 #GO for MF on downregulated genes
 ego_MF_down <- enrichGO(gene = down_DEGs$external_gene_name,
                         OrgDb = org.Hs.eg.db,
@@ -383,6 +367,65 @@ ego_MF_down <- enrichGO(gene = down_DEGs$external_gene_name,
 ```{r vis_GO_MF_up, echo=FALSE, fig.cap="**Fig. 8** Top 10 enriched upregulated genes (MF)", fig.align='center'}
 barplot(ego_MF_up,showCategory=10, main= "Top 10 enriched upregulated genes")
 ```
+The top enriched upregulated Molecular Functions (MF) reflect processes crucial for cancer progression, including cell division (microtubule binding and tubulin binding genes), cytoskeletal reorganization, cell adhesion changes (altered adhesion and peptidase regulation), and protease regulation. These biological processes support tumor growth, migration, and metastasis, which are hallmarks of aggressive cancers.
 ```{r vis_GO_MF_down, echo=FALSE, fig.cap="**Fig. 9** Top 10 enriched downregulated genes (MF)", fig.align='center'}
 barplot(ego_MF_down,showCategory=10, main= "Top 10 enriched downregulated genes")
 ```
+The downregulation of these molecular functions is consistent with: ECM remodeling,
+loss of adhesion, altered signaling, increased metastasis, tumor progression, microenvironment alterations.
+This functional downregulation aligns with hallmarks of cancer such as tissue invasion, metastasis, and microenvironmental deregulation.
+
+
+**WikiPathways (WP) analysis**, is a type of pathway enrichment  analysis that uses pathways from the WikiPathways database. 
+WikiPathways is an open-access, community-driven database where scientists can collaboratively curate and maintain biological pathways across different species. It provides a wide range of pathways, including metabolic, signaling, regulatory, and disease pathways, much like KEGG or Reactome but with the added advantage of being open and editable.
+
+WP analysis was performed using `enrichWP` function. Results of the analysis are reported below:
+```{r WP}
+#upregulated genes
+eWP_up <- enrichWP(gene = up_DEGs$entrezgene_id,
+                   organism = 'Homo sapiens',
+                   pvalueCutoff = 0.05,
+                   qvalueCutoff = 0.1)
+
+head(eWP_up, n=10)
+
+#downregulated genes
+eWP_down <- enrichWP(gene = down_DEGs$entrezgene_id,
+                     organism = 'Homo sapiens',
+                     pvalueCutoff = 0.05,
+                     qvalueCutoff = 0.1)
+
+head(eWP_up, n=10)
+```
+
+## 5. Visualization of one enriched pathway
+Using KEGG enrichment analysis it were visualized the top ten enriched pathway from upregulated genes.
+```{r KEGG, results='hide', message=FALSE, warning=FALSE}
+#KEGG enrichment analysis
+eWP_KEGGS <- enrichKEGG(gene = up_DEGs$entrezgene_id,
+                        organism = 'human',
+                        pvalueCutoff = 0.05,
+                        qvalueCutoff = 0.1)
+```
+```{r KEGG_head}
+head(eWP_KEGGS, n=20)
+```
+
+Here are reported the top 10 enriched KEGG pathways resulting from the up-regulated list of genes:
+```{r KEGG_10}
+knitr::kable(head(eWP_KEGGS[, 1:6], n=10))
+```
+
+The most enriched pathway is related to cell cycle (ID: hsa04110). It is possible to visualize it by using the package `pathview`:
+```{r pathview, results='hide', message=FALSE, warning=FALSE}
+logFC <- up_DEGs$logFC
+names(logFC) <- up_DEGs$entrezgene_id 
+pathview(gene.data = logFC, 
+         pathway.id = "hsa04110", 
+         species = "human")
+```
+Here is the network representation, with up-regulated genes represented in red.
+```{r, echo=FALSE, out.width="80%", fig.cap="**Fig. 10** hsa04110 pathway", fig.align='center'}
+knitr::include_graphics("hsa04110.pathview.png")
+```
+
