@@ -10,28 +10,33 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Introduction
-In the present report, RNA-seq count data extracted from different 
-cancer datasets from the Cancer Genome Atlas (TCGA) were analyzed. Data is split between tumor and control samples. In particular, data used for this study derived from **uterine corpus endometrial carcinoma cells**. 
+
+In the present report, RNA-seq count data extracted from different cancer datasets from the Cancer Genome Atlas (TCGA) were analyzed. Data is split between tumor and control samples. In particular, data used for this study derived from **uterine corpus endometrial carcinoma cells**.
 
 # Analysis
 
 ## 1. Load data
+
 ```{r data}
 load("Uterine_corpus_endometrial_carcinoma.RData")
 ```
+
 The loaded file includes:
 
--   `raw_counts_df`: contains the raw RNA-seq counts; 
+-   `raw_counts_df`: contains the raw RNA-seq counts;
 
 -   `c_anno_df`: contains sample names and conditions (case or control);
 
--   `r_ anno_df`: contains the ENSEMBL genes ids, the length of the genes and the genes symbols. 
+-   `r_ anno_df`: contains the ENSEMBL genes ids, the length of the genes and the genes symbols.
 
 ## 2. Extract protein coding genes
+
 It is preferable to focus the analysis on protein-coding genes only. To do so, it is used the `biomaRt` package. `biomaRt` provides tools for querying the ENSEMBL database to retrieve genomic annotations.
+
 ```{r biomart, results='hide', message=FALSE, warning=FALSE}
 library(biomaRt)
 ```
+
 ```{r PCG}
 ensembl <- useMart(biomart="ensembl",dataset="hsapiens_gene_ensembl")
 attributes <- listAttributes(ensembl)
@@ -44,11 +49,12 @@ g_coding <- g_f[which(g_f$gene_biotype == "protein_coding"),]
 PC_r_anno <- r_anno_df[which(r_anno_df$ensembl_gene_id %in% g_coding$ensembl_gene_id),]
 PC_raw_counts <- raw_counts_df[which(row.names(raw_counts_df) %in% g_coding$ensembl_gene_id),]
 ```
+
 `g_f` contains ID, biotype and gene name of the genes in `r_anno_df`. Finally, all the dataframes were filtered to keep only the coding genes.
 
 ## 3. Differential Expression Analysis
-**Differential Expression Analysis (DEA)** identifies genes that show statistically significant differences in expression levels between two or more conditions (cases and controls). 
-This analysis helps to:
+
+**Differential Expression Analysis (DEA)** identifies genes that show statistically significant differences in expression levels between two or more conditions (cases and controls). This analysis helps to:
 
 -   Identify biomarkers or genes of interest involved in specific conditions.
 
@@ -57,6 +63,7 @@ This analysis helps to:
 -   Validate hypotheses in experimental biology and drug discovery.
 
 Differential Expression analysis is here performed using `edgeR` package.
+
 ```{r libraries, results='hide', message=FALSE, warning=FALSE}
 library("GenomicFeatures")
 library("ggplot2")
@@ -65,7 +72,9 @@ library("tidyverse")
 library("edgeR")
 library("pheatmap")
 ```
+
 Firstly, a threshold was set for the raw count and the number of replicates.
+
 ```{r threshold, results='hide', message=FALSE, warning=FALSE}
 count_thr <- 20 #minimum read count threshold
 repl_thr <- 5 #minimum number of replicates threshold
@@ -74,7 +83,9 @@ filter_vec <- apply(raw_counts_df,1,
                     function(y)max(by(y,c_anno_df$condition,
                                       function(x) sum(x>=count_thr))))
 ```
+
 Such filters were then applied to the dataframes.
+
 ```{r filtering}
 #statistics for the filtering
 table(filter_vec)
@@ -82,12 +93,15 @@ table(filter_vec)
 filter_counts_df <- raw_counts_df[filter_vec>=repl_thr,] 
 filter_anno_df <- r_anno_df[rownames(filter_counts_df),]
 ```
+
 ```{r dimension}
 #check dimension consistency
 dim(filter_anno_df)
 dim(filter_counts_df)
 ```
+
 To check for uniformity in sequencing depth across samples, it is useful to visualize the library size of each sample:
+
 ```{r barplot, echo=FALSE, fig.cap="**Fig. 1** Barplot of total number of reads for each sample.", fig.align='center'}
 #barplot of reads for each sample
 size_df <- data.frame("sample"=colnames(filter_counts_df), 
@@ -98,8 +112,9 @@ ggplot(data=size_df,aes(sample,read_millions)) +
   coord_flip()+
   theme_bw()
 ```
-It might also be useful to visualize the variability in expression among samples.
-From the following boxplot it is clear that data need to be normalized before proceeding with DEA.
+
+It might also be useful to visualize the variability in expression among samples. From the following boxplot it is clear that data need to be normalized before proceeding with DEA.
+
 ```{r boxplot1, echo=FALSE, fig.cap="**Fig. 2** Boxplot of variability among samples (before normalization).", fig.align='center'}
 #boxplot of gene counts for each sample
 long_counts_df <- gather(as.data.frame(filter_counts_df), key = "sample", value = "read_number")
@@ -109,11 +124,13 @@ ggplot(data=long_counts_df,aes(sample,read_number+1)) +
   theme_bw() +
   scale_y_log10()
 ```
+
 Firstly we created a `DGEList` object: it contains information about count data (`filter_counts_df`), conditions (`c_anno_df$condition`), and gene annotations (`filter_anno_df`) and it is used by `edgeR` for normalization.
 
 Secondly, in order to apply intra- and inter-sample normalization, the function `calcNormFactors` was called while specifying the TMM (Trimmed Mean of M-values) method. In this way, the function calculates the scaling factor based on the library size.
 
 Lastly, normalized counts were converted to counts-per-million (CPM).
+
 ```{r normalization}
 ##Prepare Data for Differential Expression Analysis
 
@@ -126,7 +143,9 @@ edge_n <- calcNormFactors(edge_l, method="TMM")
 # create a cpm table (normalized expression values)
 cpm_table <- as.data.frame(round(cpm(edge_n),2))
 ```
+
 By looking at the following boxplot it is possible to assess the effect of normalization on data: the distributions of the single samples are now comparable; normalization has reduced bias in expression distributions.
+
 ```{r boxplot2, echo=FALSE, fig.cap="**Fig. 3** Boxplot after normalization.", fig.align='center'}
 #boxplot after normalization
 long_cpm_df <- gather(cpm_table, key = "sample", value = "CPM")
@@ -136,8 +155,9 @@ ggplot(data=long_cpm_df,aes(sample,CPM+1)) +
   theme_bw()+
   scale_y_log10()
 ```
-It is now possible to proceed with Differential Expression Analysis.
-An experimental design matrix is defined based on case and control conditions.
+
+It is now possible to proceed with Differential Expression Analysis. An experimental design matrix is defined based on case and control conditions.
+
 ```{r des matr}
 group <- edge_n$samples$group 
 # define the experimental design matrix
@@ -145,28 +165,38 @@ design <- model.matrix(~0+group, data=edge_n$samples)
 colnames(design) <- levels(edge_n$samples$group)
 rownames(design) <- edge_n$samples$sample
 ```
+
 The `estimateDisp` function estimates variability (dispersion) for each gene across replicates. Data is then fitted using `glmQFLFIT`.
+
 ```{r dispersion}
 # calculate dispersion and fit with edgeR
 edge_d <- estimateDisp(edge_n, design)
 edge_f <- glmQLFit(edge_d, design)
 ```
+
 With `contro` the comparison between case and control was defined.
+
 ```{r contro}
 # definition of the contrast (conditions to be compared)
 contro <- makeContrasts("case - control", levels = design)
 ```
+
 The function `glmQLFTest` was called to perform the statistical test for differential expression following the given comparison (`contro`). The result was sorted by the logarithm of the fold change and a cutoff on the p-value was applied.
+
 ```{r fit}
 #Fit the model with generalized linear models
 edge_t <- glmQLFTest(edge_f,contrast=contro)
 DEGs <- as.data.frame(topTags(edge_t,n=20000,p.value = 0.01, sort.by = "logFC"))
 ```
-For keeping track of the fold change of each gene, a new column (“class”) was added to the dataframe, containing either “+”, “-” or “=”.
-DEGs were then filtered for significance (FDR < 0.01) and categorized into:
--   "+": Up-regulated (logFC > 1.5).
--   "-": Down-regulated (logFC < -1.5).
+
+For keeping track of the fold change of each gene, a new column ("class") was added to the dataframe, containing either "+", "-" or "=". DEGs were then filtered for significance (FDR \< 0.01) and categorized into:
+
+-   "+": Up-regulated (logFC \> 1.5).
+
+-   "-": Down-regulated (logFC \< -1.5).
+
 -   "=": Not significantly different
+
 ```{r DEGs}
 DEGs$class <- "=" # Initialize a 'class' column to categorize genes
 DEGs$class[which(DEGs$logCPM > 1 & DEGs$logFC > 1.5 & DEGs$FDR < 0.01)] <- "+"  # Up-regulated
@@ -175,14 +205,17 @@ DEGs$class[which(DEGs$logCPM > 1 & DEGs$logFC < (-1.5) & DEGs$FDR < 0.01)] <- "-
 # Sort the DEGs by log fold-change in descending order
 DEGs <- DEGs[order(DEGs$logFC,decreasing = T),]
 ```
+
 In the following table are reported the counts of up-regulated, down-regulated, and neutral genes.
+
 ```{r table DEGs, echo=FALSE}
 table(DEGs$class)
 ```
+
 The results of the differential expression analysis underlined the down-regulation of 1394 genes and the up-regulation of 1418 genes, while the remaining 9855 genes are not subjected to differential expression in this case.
 
-A volcano plot is commonly used to display data from differential expression analysis because it effectively combines statistical significance and biological relevance in a single visualization. On the x-axis we find the log fold change while on the y axis the p-value; the vertical dashed lines represent the fold-change thresholds (logFC > 1.5 or < -1.5). 
-The most significant DEGs are represented by the colored dots: green for the down-regulated genes and red for the up-regulated ones respectively.
+A volcano plot is commonly used to display data from differential expression analysis because it effectively combines statistical significance and biological relevance in a single visualization. On the x-axis we find the log-fold change while on the y axis the p-value; the vertical dashed lines represent the fold-change thresholds (logFC \> 1.5 or \< -1.5). The most significant DEGs are represented by the colored dots: green for the down-regulated genes and red for the up-regulated ones respectively.
+
 ```{r volcano, echo=FALSE, fig.cap="**Fig. 4** Volcano plot.", fig.align='center'}
 ## Volcano plot
 # Add a column for -log10(FDR) for plotting purposes
@@ -208,7 +241,9 @@ volcano_plot <- ggplot(DEGs, aes(x = logFC, y = neg_log10_FDR, color = class)) +
 
 print(volcano_plot)
 ```
-Heatmaps are essential for visualizing and interpreting expression data in differential analysis. Heatmaps display expression levels of genes across multiple samples. Hierarchical clustering is exploited to group together samples based on their similarity. The data was filtered to focus only on up- and down regulated genes (differentially expressed genes). 
+
+Heatmaps are essential for visualizing and interpreting expression data in differential analysis. Heatmaps display expression levels of genes across multiple samples. Hierarchical clustering is exploited to group together samples based on their similarity. The data was filtered to focus only on up- and down- regulated genes (differentially expressed genes).
+
 ```{r heatmap, echo=FALSE, fig.cap="**Fig. 5** Heatmap.", fig.align='center'}
 ##Heatmap
 cols <- cols <- c(ifelse(c_anno_df$condition == "case", "sienna2", "goldenrod1")) 
@@ -218,7 +253,9 @@ pal <- colorRampPalette(pal)(100)
 heatmap(as.matrix(cpm_table[which(rownames(cpm_table)%in%DEGs$ensembl_gene_id[which(DEGs$class!="=")]),]),
         ColSideColors = cols,cexCol = 0.5,margins = c(4,4),col=pal,cexRow = 0.2)
 ```
+
 The clustering process managed to separate almost perfectly the cases (red) from the controls (yellow).
+
 ```{r text file, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
 ## Export differentially expressed genes in a text file
 up_DEGs <- DEGs[which(DEGs$class=="+"),]
@@ -227,4 +264,125 @@ down_DEGs <- DEGs[which(DEGs$class=="-"),]
 write.table(up_DEGs,file="up_DEGs.txt",row.names=F,col.names=T,sep="\t",quote=F)
 write.table(down_DEGs,file="down_DEGs.txt",row.names=F,col.names=T,sep="\t",quote=F)
 write.table(DEGs,file="DEGs.txt",row.names=F,col.names=T,sep="\t",quote=F)
+```
+
+## 4. Gene Set Enrichment Analysis (GSEA)
+
+**Gene Set Enrichment Analysis (GSEA)** is a statistical technique used to determine whether a predefined set of genes shows statistically significance, coordinated differences in expression under two different conditions such as "treatment" vs. "control" or "healthy" vs. "disease." Instead of evaluating individual genes separately, GSEA assesses entire groups of genes that are functionally related, such as those involved in a particular pathway or biological process.
+
+Gene Set Enrichment Analysis is here done using the `clusterProfiler` package.
+
+```{r libGSEA, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+library(fgsea)
+library(org.Hs.eg.db)
+library(biomaRt)
+library(clusterProfiler)
+library(enrichplot)
+library(ggnewscale)
+library(DOSE)
+library(pathview)
+library(tidyverse)
+```
+
+Firstly, `entrezgene_id` and `external_gene_name` were retrieved, using the `biomaRt` package, for each gene in the DEGs dataset. In `convert` these mappings will be stored and with `merge()` the Degs data is aligned to mappings in `ensembl_gene_id`.
+
+```{r entrezgene_id}
+### Load results of DEG (differentially expressed genes) analysis
+DEGs <- read.table("DEGs.txt",header=T,sep="\t",as.is=T)
+table(DEGs$class) #checks the count of genes by class (upregulated, downregulated or the same)
+
+### Use biomaRt to map Gene symbols, Entrez IDs and Ensembl gen IDs
+ensembl <- useEnsembl(biomart = "ensembl",dataset = "hsapiens_gene_ensembl")
+convert <- getBM(attributes=c("ensembl_gene_id","entrezgene_id","external_gene_name"),
+                 filters=c("ensembl_gene_id"), 
+                 values=DEGs$ensembl_gene_id,
+                 mart = ensembl)
+#Connects to the Ensembl database to retrieve entrezgene_id and 
+#external_gene_name for each gene in DEGs.
+#convert will store these mappings.
+#merge() aligns DEG data with the convert mappings by ensembl_gene_id
+DEGs <- merge(DEGs,convert)
+DEGs <- DEGs[which(!is.na(DEGs$entrezgene_id)),]
+DEGs <- DEGs[-which(duplicated(DEGs$entrezgene_id)),]
+```
+
+Up- and down- regulated genes are now stored in two different lists: `up_DEGs` and `down_DEGs`.
+
+```{r up_down}
+up_DEGs <- merge(up_DEGs,convert)
+up_DEGs <- up_DEGs[which(!is.na(up_DEGs$entrezgene_id)),]
+up_DEGs <- up_DEGs[-which(duplicated(up_DEGs$entrezgene_id)),]
+down_DEGs <- merge(down_DEGs,convert)
+down_DEGs <- down_DEGs[which(!is.na(down_DEGs$entrezgene_id)),]
+down_DEGs <- down_DEGs[-which(duplicated(down_DEGs$entrezgene_id)),]
+```
+
+```{r ranks, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+## Create vector with ranks
+ranks <- DEGs$logFC
+ranks <- sort(ranks,decreasing = T)
+names(ranks) <- DEGs$entrezgene_id #maps the ranks to entrezgene_id
+head(ranks)
+barplot(sort(ranks, decreasing = T),las=3)
+#ranks is created with log fold change (log2_FC) values from DEGs, 
+#sorted in descending order.
+```
+Now gene set enrichment analysis for **Gene Ontology (GO)** within the biological process (`ont = "BP"`) is performed.
+GO enrichment identifies which terms are statistically overrepresented (enriched) in the given set of genes, suggesting that those genes are involved in specific biological processes.
+The function `enrichGO` is used to perform gene set enrichment analysis on the list of up- and down- regulated genes and the human database (`OrgDb = org.Hs.eg.db`). The p-value need to be adjusted for multiple hypothesis testing, which was performed through the Benjamini-Hochberg (`pAdjustMethod = "BH"`) procedure.
+The outputs `ego_BP_up` and `ego_BP_down` will contain the enriched GO terms for biological processes associated with the genes.
+The results highlight which biological processes are overrepresented among up- or downregulated genes, suggesting their involvement in specific pathways or responses.
+```{r GO_BP}
+### GO (Gene Ontology) analysis
+## Perform Gene Ontology enrichment analysis (Biological Process)
+#GO for BP on upregulated genes
+ego_BP_up <- enrichGO(gene = up_DEGs$external_gene_name,
+                      OrgDb = org.Hs.eg.db,
+                      keyType = 'SYMBOL',
+                      ont = "BP",
+                      pAdjustMethod = "BH",
+                      pvalueCutoff = 0.05,
+                      qvalueCutoff = 0.05)
+#enrichGO() performs GO enrichment for Biological Process (ont = "BP") using upregulated genes.
+#GO for BP on downregulated genes
+ego_BP_down <- enrichGO(gene = down_DEGs$external_gene_name,
+                        OrgDb = org.Hs.eg.db,
+                        keyType = 'SYMBOL',
+                        ont = "BP",
+                        pAdjustMethod = "BH",
+                        pvalueCutoff = 0.05,
+                        qvalueCutoff = 0.05)
+```
+```{r vis_GO_up, echo=FALSE, fig.cap="**Fig. 6** Top 10 enriched upregulated genes (BP)", fig.align='center'}
+## Visualize the top 10 enriched terms with a barplot 
+barplot(ego_BP_up,showCategory=10, main= "Top 10 enriched upregulated genes")
+```
+```{r vis_GO_down, echo=FALSE, fig.cap="**Fig. 7** Top 10 enriched downregulated genes (BP)", fig.align='center'}
+barplot(ego_BP_down,showCategory=10, main= "Top 10 enriched downregulated genes")
+```
+The same function is then applied to analyze the ontology related to molecular function (`ont = "MF"`), simply by changing the ontology parameter. Results of this functin are represented in the following barplots
+```{r GO_MF, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+## Perform Gene Ontology (GO) enrichment analysis (Molecular Function)
+#GO for MF on upregulated genes
+ego_MF_up <- enrichGO(gene = up_DEGs$external_gene_name,
+                      OrgDb = org.Hs.eg.db,
+                      keyType = 'SYMBOL',
+                      ont = "MF",
+                      pAdjustMethod = "BH",
+                      pvalueCutoff = 0.05,
+                      qvalueCutoff = 0.05)
+#GO for MF on downregulated genes
+ego_MF_down <- enrichGO(gene = down_DEGs$external_gene_name,
+                        OrgDb = org.Hs.eg.db,
+                        keyType = 'SYMBOL',
+                        ont = "MF",
+                        pAdjustMethod = "BH",
+                        pvalueCutoff = 0.05,
+                        qvalueCutoff = 0.05)
+```
+```{r vis_GO_MF_up, echo=FALSE, fig.cap="**Fig. 8** Top 10 enriched upregulated genes (MF)", fig.align='center'}
+barplot(ego_MF_up,showCategory=10, main= "Top 10 enriched upregulated genes")
+```
+```{r vis_GO_MF_down, echo=FALSE, fig.cap="**Fig. 9** Top 10 enriched downregulated genes (MF)", fig.align='center'}
+barplot(ego_MF_down,showCategory=10, main= "Top 10 enriched downregulated genes")
 ```
