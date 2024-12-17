@@ -350,17 +350,17 @@ pathview(gene.data = logFC,
 # Point 6: Identifying enriched TFs
 #------------------------------------
 library(biomaRt)
-library(MotifDb)
-library(seqLogo)
-library(PWMEnrich)
+library(MotifDb)  # Access curated TF motif databases.
+library(seqLogo)   # For visualizing DNA motifs using sequence logos.
+library(PWMEnrich)  # Main package for performing motif enrichment analysis.
 library(PWMEnrich.Hsapiens.background)
 
 # finding promoter sequences
 # BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene") 
 # BiocManager::install("BSgenome.Hsapiens.UCSC.hg38") 
 
-library(TxDb.Hsapiens.UCSC.hg38.knownGene)
-library(BSgenome.Hsapiens.UCSC.hg38)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)  # Transcript database for human genes (hg38 genome build).
+library(BSgenome.Hsapiens.UCSC.hg38)       # Human genome sequence (hg38).
 
 genes <- genes(TxDb.Hsapiens.UCSC.hg38.knownGene)
 ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
@@ -368,11 +368,11 @@ df <- getBM(attributes = c("external_gene_name",'entrezgene_id'),
             values=names(genes),filters ='entrezgene_id', mart = ensembl)
 names(genes) <- df$external_gene_name[match(genes$gene_id,df$entrezgene_id)]
 
-#serena ha fatto anche questa cosa
-#genes_name <- upDEGs$external_gene_name # List of up-regulated genes
-#intersect_names <- intersect(names(genes), genes_name) # Intersection of up-regulated genes with the database
+genes_name <- up_DEGs$external_gene_name # List of up-regulated genes
+intersect_names <- intersect(names(genes), genes_name) #Filters genes to retain only those in both the up-regulated list and the UCSC database.
 
-x <- promoters(genes,upstream = 500,downstream = 0)[c('TP53','RB1')]
+#PERCHè SOLO CON TP53 E RB1????
+x <- promoters(genes,upstream = 500,downstream = 0)[c('TP53','RB1')] #Extracts promoter regions 500 bp upstream of the transcription start site (TSS).
 seq <- getSeq(BSgenome.Hsapiens.UCSC.hg38,x) 
 
 # Calculating motif enrichment scores
@@ -385,7 +385,7 @@ res = motifEnrichment(seq,PWMLogn.hg19.MotifDb.Hsap,score = "affinity")
 report = sequenceReport(res, 1)
 report
 plot(report[report$p.value < 0.01], fontsize=7, id.fontsize=6)
-plot(report[1:3])
+plot(report[1:5])
 
 #----------------------------------
 # Point 7: PWM from MotifDB
