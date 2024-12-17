@@ -429,3 +429,61 @@ Here is the network representation, with up-regulated genes represented in red.
 knitr::include_graphics("hsa04110.pathview.png")
 ```
 
+## 6. Identify enriched TFs
+Now we focus on identifying **transcription factors (TFs) enriched** in the promoter sequences of up-regulated genes using motif enrichment analysis. Motif enrichment analysis determines whether specific TF binding motifs are statistically overrepresented (enriched) in promoters of up-regulated genes. Overrepresentation indicates that certain TFs may play regulatory roles in the observed changes in gene expression.
+The used tool `PWMEnrich` use Position Weight Matrices (PWMs) to scan sequences and calculate enrichment scores. PWMs represent the likelihood of observing a specific nucleotide at each position of a binding site motif. Scoring and enrichment tests provide statistical significance values (p-values) for overrepresented motifs.
+```{r libTF, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+library(biomaRt)
+library(MotifDb)
+library(seqLogo)
+library(PWMEnrich)
+library(PWMEnrich.Hsapiens.background)
+library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+library(BSgenome.Hsapiens.UCSC.hg38)
+```
+
+Firstly, with `getSeq()` we retrieve the actual DNA sequences of these promoters from the genome.
+```{r TFs, message=FALSE}
+genes <- genes(TxDb.Hsapiens.UCSC.hg38.knownGene)
+ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+df <- getBM(attributes = c("external_gene_name",'entrezgene_id'),
+            values=names(genes),filters ='entrezgene_id', mart = ensembl)
+names(genes) <- df$external_gene_name[match(genes$gene_id,df$entrezgene_id)]
+
+genes_name <- up_DEGs$external_gene_name # List of up-regulated genes
+intersect_names <- intersect(names(genes), genes_name) # Intersection of up-regulated genes with the database
+
+x <- promoters(genes,upstream = 500,downstream = 0)[c('TP53','RB1')]
+seq <- getSeq(BSgenome.Hsapiens.UCSC.hg38,x) 
+```
+
+```{r lib_MES, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+# Calculating motif enrichment scores
+library(MotifDb)   #Provides access to a curated collection of DNA sequence motifs.
+library(seqLogo)   #Used for creating sequence logo plots.
+library(PWMEnrich) #Offers functions for motif enrichment analysis.
+library(PWMEnrich.Hsapiens.background)
+```
+
+Secondly, `PWMLogn.hg19.MotifDb.Hsap` loads a precomputed background model for motif enrichment using TF motifs from `MotifDb`.
+`motifEnrichment()` scans the promoter sequences (`seq`) using the background model and calculates motif enrichment scores using "affinity" scoring.
+```{r MES}
+data(PWMLogn.hg19.MotifDb.Hsap)
+res = motifEnrichment(seq,PWMLogn.hg19.MotifDb.Hsap,score = "affinity")
+report = sequenceReport(res, 1)
+report
+```
+
+In the following plot are given the top 5 enriched TFs.
+```{r plotMES, echo=FALSE, fig.cap="**Fig. 11** Top 5 enriched TFs", fig.align='center'}
+plot(report[1:5])
+```
+
+## 7. Motif analyisi for the top enriched TFs
+```{r lib_Man, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+library(MotifDb)
+library(seqLogo)
+library(PWMEnrich)
+library(PWMEnrich.Hsapiens.background)
+```
+
