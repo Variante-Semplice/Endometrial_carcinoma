@@ -366,12 +366,12 @@ genes <- genes(TxDb.Hsapiens.UCSC.hg38.knownGene)
 ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
 df <- getBM(attributes = c("external_gene_name",'entrezgene_id'),
             values=names(genes),filters ='entrezgene_id', mart = ensembl)
-names(genes) <- df$external_gene_name[match(genes$gene_id,df$entrezgene_id)]
+matched_indices <- match(genes$gene_id, df$entrezgene_id)
+names(genes) <- ifelse(!is.na(matched_indices), df$external_gene_name[matched_indices], NA)
 
 genes_name <- up_DEGs$external_gene_name # List of up-regulated genes
 intersect_names <- intersect(names(genes), genes_name) #Filters genes to retain only those in both the up-regulated list and the UCSC database.
 
-#PERCHè SOLO CON TP53 E RB1????
 x <- promoters(genes,upstream = 500,downstream = 0)[intersect_names[intersect_names!= ""]] #Extracts promoter regions 500 bp upstream of the transcription start site (TSS).
 seq <- getSeq(BSgenome.Hsapiens.UCSC.hg38,x) 
 
@@ -400,27 +400,28 @@ library(seqLogo)
 library(PWMEnrich)
 library(PWMEnrich.Hsapiens.background)
 
-mdb.human.rfx3 = subset(MotifDb, organism=='Hsapiens' & geneSymbol=="RFX3")
-motifs = as.list(mdb.human.rfx3)
-length((mdb.human.rfx3))
+mdb.human.selected = subset(MotifDb, organism=='Hsapiens' & geneSymbol=="RFX3")
+if (length(mdb.human.selected) == 0) stop("No motifs found for the selected TF.")
+motifs = as.list(mdb.human.selected)
+length((mdb.human.selected))
 pwms <- lapply(motifs, toPWM)
+if (length(pwms) == 0) stop("No PWMs were generated for the selected TF.")
 ecdf = motifEcdf(pwms,organism = "hg19",quick=TRUE)
 # Initialize an empty list to store threshold values
 thresholds <- numeric()
-# Loop through each eCDF and calculate the 99.75% threshold in log2 scale
-for (ecdf in ecdf) {
-  # Calculate the 99.75 percentile threshold and take log2
-  threshold <- log2(quantile(ecdf, 0.9975))
-  # Store the threshold
-  thresholds <- c(thresholds, threshold)
+# Loop through each PWM's eCDF and calculate the threshold
+for (ecdf_obj in ecdf) {
+  # Calculate the 99.75 percentile threshold from the eCDF
+  threshold <- log2(quantile(ecdf_obj, 0.9975))
+  thresholds <- c(thresholds, threshold)  # Append to thresholds
 }
 # Display thresholds
-thresholds
+print(thresholds)
 
-#a Michela non funzionano queste due righe
-scores = motifScores(seq,PWM,raw.score=TRUE)
-plotMotifScores(scores,sel.motifs="CREB1_HUMAN.H10MO.A",cols=c("red","green","blue"),cutoff=0.9975) 
-#il nome del 'motifs' credo vada cambiato con uno che abbiamo noi
+#funzionano ma fa caga (tra l'altro non ho capito perchè lo facciamo?)
+scores = motifScores(seq,pwms,raw.score=TRUE)
+plotMotifScores(scores,sel.motifs=names(mdb.human.selected),cols=c("red","green","blue"),cutoff=0.9975) 
+
 
 #----------------------------------
 # Point 8: Pattern Matching
@@ -430,7 +431,7 @@ plotMotifScores(scores,sel.motifs="CREB1_HUMAN.H10MO.A",cols=c("red","green","bl
 # any of the previously selected PWMs. Use pattern matching as done during the course;
 
 #non so se è giusto
-scores = motifScores(seq, pwms, raw.scores = FALSE, verbose = FALSE, cutoff = threshold)
+scores = motifScores(seq, pwms, raw.scores = FALSE, verbose = FALSE, cutoff = thresholds)
 highscore_seq <- which(apply(scores,1,sum)>0)
 genes_id <- up_DEGs[highscore_seq,]
 
@@ -451,31 +452,87 @@ write.table(unique(up_DEGs$external_gene_name),sep = '\t', file = 'PPI_up_DEGs.t
 
 links <- read.delim("string_interactions.tsv") # TSV data downloaded from STRING webpage 
 #(dovete scaricarlo da STRING perchè è troppo pesante per git)
-UP__DEGs <- read.table("PPI_up_DEGs.txt")
+head(links)
+UP__DEGs <- read.table("PPI_up_DEGs.txt", sep = "\t", header = TRUE)
 
-#split_links <- strsplit(links$protein1.protein2.combined_score, " ")
-#links <- do.call(rbind, split_links) #ci mette un botto
-#colnames(links) <- c("protein1", "protein2", "combined_score")
-
-# Convert to data frame and fix data types
-#links <- as.data.frame(links, stringsAsFactors = FALSE)
 
 #--------------------
 # Point 10: Network
 #--------------------
-# Import the network in R and using igraph package identify and plot the largest 
-#connected component.  
+## Create nodes annotations using biomaRt
+library(biomaRt)
+library(igraph)
+library(dplyr)
 
-#da rifare non funzionaaaaaaa (magari è solo un problema mio)
+# Step 1: Use biomaRt to retrieve node annotations
+ensembl <- useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
 
-ensembl <- useMart(biomart="ensembl",dataset="hsapiens_gene_ensembl")
-nodes <- getBM(attributes=c("external_gene_name","ensembl_gene_id","description","gene_biotype","start_position","end_position","chromosome_name","strand"),
-        filters=c("ensembl_gene_id"), 
-        values=UP__DEGs[,1],
-        mart = ensembl)
-nodes = unique(nodes[,c(1,3:6)])
+nodes <- getBM(attributes = c("external_gene_name", "ensembl_gene_id", "description", 
+                              "gene_biotype", "start_position", "end_position", 
+                              "chromosome_name", "strand"),
+               filters = "external_gene_name", 
+               values = unique(c(links$X.node1, links$node2)),  # Combine all nodes in the network
+               mart = ensembl)
 
-colnames(nodes) <- "name"
-colnames(links) <- c("from", "to")
+# Keep only relevant columns and remove duplicates
+nodes <- unique(nodes[, c("external_gene_name", "description", "gene_biotype", 
+                          "start_position", "end_position", "chromosome_name", "strand")])
 
-net <- graph_from_data_frame(d = links, vertices = nodes, directed = FALSE)
+# Step 2: Filter out nodes that are not in the links
+valid_nodes <- unique(c(links$X.node1, links$node2))  # All nodes in the links
+## Remove duplicate entries in the `nodes` data frame
+# Ensure `external_gene_name` is unique
+nodes <- nodes %>%
+  distinct(external_gene_name, .keep_all = TRUE)
+
+# Build the graph after deduplication
+net <- graph_from_data_frame(
+  d = links[, c("X.node1", "node2")],  # Edges
+  vertices = nodes,                   # Filtered unique nodes
+  directed = FALSE
+)
+
+# Check the network object
+class(net)  # Should be "igraph"
+net
+plot(net)
+
+## Check attributes
+edge_attr(net)
+vertex_attr(net)
+graph_attr(net)
+
+## Plot the PPI network
+plot(net, 
+     edge.width=5,
+     vertex.color="orange",
+     vertex.size=10,
+     vertex.frame.color="darkgray",
+     vertex.label.color="black", 
+     vertex.label.cex=0.7,
+     edge.curved=0.1) 
+
+## Color vertex by gene_biotype
+table(V(net)$gene_biotype)
+col = rep("orange",length(V(net)))
+col[which(V(net)$gene_biotype=="processed_pseudogene")] = "purple"
+col[which(V(net)$gene_biotype=="lncRNA")] = "darkgreen"
+
+plot(net, 
+     edge.width=5,
+     vertex.color=col,
+     vertex.size=10,
+     vertex.frame.color="darkgray",
+     vertex.label.color="black", 
+     vertex.label.cex=0.7,
+     edge.curved=0.1) 
+
+## Vertex size by gene length
+plot(net, 
+     edge.width=5,
+     vertex.color=col,
+     vertex.size=log10(as.numeric(V(net)$end_position-V(net)$start_position)),
+     vertex.frame.color="darkgray",
+     vertex.label.color="black", 
+     vertex.label.cex=0.7,
+     edge.curved=0.1) 
