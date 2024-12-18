@@ -27,7 +27,7 @@ The loaded file includes:
 
 -   `c_anno_df`: contains sample names and conditions (case or control);
 
--   `r_ anno_df`: contains the ENSEMBL genes ids, the length of the genes and the genes symbols.
+-   `r_anno_df`: contains the ENSEMBL genes ids, the length of the genes and the genes symbols.
 
 ## 2. Extract protein coding genes
 
