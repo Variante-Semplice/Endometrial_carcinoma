@@ -223,7 +223,7 @@ DEGs <- read.table("DEGs.txt",header=T,sep="\t",as.is=T)
 table(DEGs$class) #checks the count of genes by class (upregulated, downregulated or the same)
 
 ### Use biomaRt to map Gene symbols, Entrez IDs and Ensembl gen IDs
-ensembl <- useEnsembl(biomart = "ensembl",dataset = "hsapiens_gene_ensembl")
+ensembl <- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
 convert <- getBM(attributes=c("ensembl_gene_id","entrezgene_id","external_gene_name"),
                  filters=c("ensembl_gene_id"), 
                  values=DEGs$ensembl_gene_id,
@@ -266,6 +266,7 @@ ego_BP_up <- enrichGO(gene = up_DEGs$external_gene_name,
                       pvalueCutoff = 0.05,
                       qvalueCutoff = 0.05)
 #enrichGO() performs GO enrichment for Biological Process (ont = "BP") using upregulated genes.
+
 #GO for BP on downregulated genes
 ego_BP_down <- enrichGO(gene = down_DEGs$external_gene_name,
                         OrgDb = org.Hs.eg.db,
@@ -395,10 +396,10 @@ plot(report[1:5])
 # for all of them the distribution (log2) threshold cutoff at 99.75% 
 # (relax the threshold if needed)
 # ho usato tp63 perchè sembrava un bel nome ma potremmo sceglierne altri
-library(MotifDb)
-library(seqLogo)
-library(PWMEnrich)
-library(PWMEnrich.Hsapiens.background)
+library(MotifDb) #Provides a curated collection of transcription factor binding motifs.
+library(seqLogo)  #Used for visualization of sequence motifs as sequence logos.
+library(PWMEnrich)  #Provides functionality for PWM-based motif enrichment analysis.
+library(PWMEnrich.Hsapiens.background) #Supplies human-specific background models for enrichment.
 
 mdb.human.selected = subset(MotifDb, organism=='Hsapiens' & geneSymbol=="RFX3")
 if (length(mdb.human.selected) == 0) stop("No motifs found for the selected TF.")
@@ -439,7 +440,7 @@ dim(genes_id)
 head(genes_id)
 
 #------------------------------------
-# Point 9: PPI interaction analysis
+# Point 9: PPI analysis
 #------------------------------------
 #Use STRING database to find PPI interactions among differentially expressed 
 #genes and export the network in TSV format. 
