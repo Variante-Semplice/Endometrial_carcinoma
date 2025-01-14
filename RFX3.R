@@ -13,7 +13,7 @@ load("Uterine_corpus_endometrial_carcinoma.RData")
 
 library(biomaRt)
 # connecting to the human genes dataset
-ensembl <- useMart(biomart="ensembl",dataset="hsapiens_gene_ensembl")
+ensembl <- useEnsembl(biomart="ensembl",dataset="hsapiens_gene_ensembl", mirror = "asia")
 # have a look at the possible attributes
 attributes <- listAttributes(ensembl)
 # Find function for all genes 
@@ -223,7 +223,7 @@ DEGs <- read.table("DEGs.txt",header=T,sep="\t",as.is=T)
 table(DEGs$class) #checks the count of genes by class (upregulated, downregulated or the same)
 
 ### Use biomaRt to map Gene symbols, Entrez IDs and Ensembl gen IDs
-ensembl <- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+ensembl <- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", mirror = "asia")
 convert <- getBM(attributes=c("ensembl_gene_id","entrezgene_id","external_gene_name"),
                  filters=c("ensembl_gene_id"), 
                  values=DEGs$ensembl_gene_id,
@@ -364,7 +364,7 @@ library(TxDb.Hsapiens.UCSC.hg38.knownGene)  # Transcript database for human gene
 library(BSgenome.Hsapiens.UCSC.hg38)       # Human genome sequence (hg38).
 
 genes <- genes(TxDb.Hsapiens.UCSC.hg38.knownGene)
-ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+ensembl <- useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl", mirror = "asia")
 df <- getBM(attributes = c("external_gene_name",'entrezgene_id'),
             values=names(genes),filters ='entrezgene_id', mart = ensembl)
 matched_indices <- match(genes$gene_id, df$entrezgene_id)
@@ -416,8 +416,10 @@ for (ecdf_obj in ecdf) {
   threshold <- log2(quantile(ecdf_obj, 0.9975))
   thresholds <- c(thresholds, threshold)  # Append to thresholds
 }
+
 # Display thresholds
-print(thresholds)
+threshold_data <- data.frame(TF = "RFX3", PWM = names(pwms), Threshold = thresholds)
+print(threshold_data)
 
 #funzionano ma fa caga (tra l'altro non ho capito perchè lo facciamo?)
 scores = motifScores(seq,pwms,raw.score=TRUE)
@@ -451,7 +453,7 @@ library(biomaRt)
 write.table(unique(up_DEGs$external_gene_name),sep = '\t', file = 'PPI_up_DEGs.txt',row.names = F, 
             col.names = F, quote = T)
 
-links <- read.delim("string_interactions.tsv") # TSV data downloaded from STRING webpage 
+links <- read.delim("string_interactions_short.tsv") # TSV data downloaded from STRING webpage 
 #(dovete scaricarlo da STRING perchè è troppo pesante per git)
 head(links)
 UP__DEGs <- read.table("PPI_up_DEGs.txt", sep = "\t", header = TRUE)
@@ -466,7 +468,7 @@ library(igraph)
 library(dplyr)
 
 # Step 1: Use biomaRt to retrieve node annotations
-ensembl <- useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+ensembl <- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", mirror = 'asia')
 
 nodes <- getBM(attributes = c("external_gene_name", "ensembl_gene_id", "description", 
                               "gene_biotype", "start_position", "end_position", 
@@ -475,14 +477,23 @@ nodes <- getBM(attributes = c("external_gene_name", "ensembl_gene_id", "descript
                values = unique(c(links$X.node1, links$node2)),  # Combine all nodes in the network
                mart = ensembl)
 
+
+nodes <- getBM(attributes=c("external_gene_name","ensembl_gene_id","description","gene_biotype","start_position","end_position","chromosome_name","strand"),
+               filters=c("external_gene_name"), 
+               values=UP__DEGs [,1],
+               mart = ensembl)
+
+
+
+
 # Keep only relevant columns and remove duplicates
 nodes <- unique(nodes[, c("external_gene_name", "description", "gene_biotype", 
                           "start_position", "end_position", "chromosome_name", "strand")])
 
 # Step 2: Filter out nodes that are not in the links
 valid_nodes <- unique(c(links$X.node1, links$node2))  # All nodes in the links
-## Remove duplicate entries in the `nodes` data frame
-# Ensure `external_gene_name` is unique
+## Remove duplicate entries in the nodes data frame
+# Ensure external_gene_name is unique
 nodes <- nodes %>%
   distinct(external_gene_name, .keep_all = TRUE)
 
@@ -496,7 +507,7 @@ net <- graph_from_data_frame(
 # Check the network object
 class(net)  # Should be "igraph"
 net
-plot(net)
+
 
 ## Check attributes
 edge_attr(net)
@@ -505,7 +516,7 @@ graph_attr(net)
 
 ## Plot the PPI network
 plot(net, 
-     edge.width=5,
+     edge.width=2,
      vertex.color="orange",
      vertex.size=10,
      vertex.frame.color="darkgray",
@@ -513,27 +524,12 @@ plot(net,
      vertex.label.cex=0.7,
      edge.curved=0.1) 
 
-## Color vertex by gene_biotype
-table(V(net)$gene_biotype)
-col = rep("orange",length(V(net)))
-col[which(V(net)$gene_biotype=="processed_pseudogene")] = "purple"
-col[which(V(net)$gene_biotype=="lncRNA")] = "darkgreen"
 
-plot(net, 
-     edge.width=5,
-     vertex.color=col,
-     vertex.size=10,
-     vertex.frame.color="darkgray",
-     vertex.label.color="black", 
-     vertex.label.cex=0.7,
-     edge.curved=0.1) 
 
-## Vertex size by gene length
-plot(net, 
-     edge.width=5,
-     vertex.color=col,
-     vertex.size=log10(as.numeric(V(net)$end_position-V(net)$start_position)),
-     vertex.frame.color="darkgray",
-     vertex.label.color="black", 
-     vertex.label.cex=0.7,
-     edge.curved=0.1) 
+
+# Find the node with the highest degree (most connections)
+most_connected_node_23 <- V(net)[which.max(degree(net))]
+
+# Create subgraph of this node and its immediate neighbors
+neighborhood_net_23 <- make_ego_graph(net, order = 1, nodes = most_connected_node_23)[[1]]
+plot(neighborhood_net_23)

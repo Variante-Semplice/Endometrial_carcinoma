@@ -38,7 +38,7 @@ library(biomaRt)
 ```
 
 ```{r PCG}
-ensembl <- useMart(biomart="ensembl",dataset="hsapiens_gene_ensembl")
+ensembl <- useEnsembl(biomart="ensembl",dataset="hsapiens_gene_ensembl", mirror = "asia")
 attributes <- listAttributes(ensembl)
 g_f <- getBM(attributes = c("ensembl_gene_id", "gene_biotype",
                             "external_gene_name"),mart = ensembl,
@@ -278,7 +278,7 @@ Firstly, `entrezgene_id` and `external_gene_name` were retrieved, using the `bio
 # Load results of DEG
 DEGs <- read.table("DEGs.txt",header=T,sep="\t",as.is=T)
 
-ensembl <- useEnsembl(biomart = "ensembl",dataset = "hsapiens_gene_ensembl")
+ensembl <- useEnsembl(biomart = "ensembl",dataset = "hsapiens_gene_ensembl", mirror = "asia")
 convert <- getBM(attributes=c("ensembl_gene_id","entrezgene_id","external_gene_name"),
                  filters=c("ensembl_gene_id"), 
                  values=DEGs$ensembl_gene_id,
@@ -452,7 +452,7 @@ Firstly, with `getSeq()` we retrieve the actual DNA sequences of these promoters
 
 ```{r TFs, message=FALSE, warning=FALSE}
 genes <- genes(TxDb.Hsapiens.UCSC.hg38.knownGene)
-ensembl <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+ensembl <- useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl", mirror = "asia")
 df <- getBM(attributes = c("external_gene_name",'entrezgene_id'),
             values=names(genes),filters ='entrezgene_id', mart = ensembl)
 matched_indices <- match(genes$gene_id, df$entrezgene_id)
@@ -487,7 +487,7 @@ report
 
 In the following plot are given the top 5 enriched TFs.
 
-```{r plotMES, echo=FALSE, fig.cap="**Fig. 11** Top 5 enriched TFs", fig.align='center'}
+```{r plotMES, echo=FALSE, fig.cap="**Fig. 11** Top 5 enriched TFs.", fig.align='center'}
 plot(report[1:5])
 ```
 
@@ -500,20 +500,22 @@ library(PWMEnrich)
 library(PWMEnrich.Hsapiens.background)
 ```
 
-Next, it was analyzed the top enriched TF: RFX3. The retrieved motifs are then converted into Position Weight Matrices (PWMs) using the toPWM function. The `motifEcdf` function computes the empirical cumulative distribution function for the binding scores of each PWM. For each PWM's eCDF, the code calculates the 99.75th percentile cutoff. This is done using the quantile function applied to the eCDF object. The threshold is transformed into log2 scale for interpretability and appended to the thresholds list.
+Next, it was analyzed the top enriched TF: RFX3. The retrieved motifs are then converted into Position Weight Matrices (PWMs) using the `toPWM` function. The `motifEcdf` function computes the empirical cumulative distribution function for the binding scores of each PWM. For each PWM's eCDF, the code calculates the 99.75th percentile cutoff. This is done using the `quantile` function applied to the eCDF object. The threshold is transformed into log2 scale for interpretability and appended to the thresholds list.
 
 In the end, the calculated thresholds for each PWM are displayed. These thresholds can be used as binding score cutoffs for identifying regions of high TF binding affinity.
 
-```{r topPWMs}
+```{r toPWMs, message=FALSE, warning=FALSE, results='hide'}
 mdb.human.selected = subset(MotifDb, organism=='Hsapiens' & geneSymbol=="RFX3")
 if (length(mdb.human.selected) == 0) stop("No motifs found for the selected TF.")
 
 motifs = as.list(mdb.human.selected)
 length((mdb.human.selected))
+
 pwms <- lapply(motifs, toPWM)
 if (length(pwms) == 0) stop("No PWMs were generated for the selected TF.")
 
 ecdf = motifEcdf(pwms,organism = "hg19",quick=TRUE)
+
 # Initialize an empty list to store threshold values
 thresholds <- numeric()
 # Loop through each PWM's eCDF and calculate the threshold
@@ -527,10 +529,18 @@ for (ecdf_obj in ecdf) {
 threshold_data <- data.frame(TF = "RFX3", PWM = names(pwms), Threshold = thresholds)
 print(threshold_data)
 ```
+This means that there are 9 different documented binding motifs for RFX3 in the `MotifDb` database for humans. 
+Having multiple motifs for the same transcription factor (RFX3) can mean several things:
+
+-   Different Studies/Sources
+
+-   Binding flexibility
+
+-   Context-dependent
 
 ## 8. Pattern Matching
 
-The following code identifies specific up-regulated genes whose promoter regions exhibit significant binding scores for transcription factor (TF) motifs. `MotifScores` computes the binding scores of the provided transcription factor motifs (PWMs) for a set of promoter input sequences (`seq`). The output `scores` will be a matrix where each row corresponds to a DNA sequence, and each column represents a PWM. Each value indicates whether the score for a motif exceeds its threshold. `genes_id` will only contain a subset of `up_DEGs` with significant TF motif binding in their promoter regions.
+The following code identifies specific up-regulated genes whose promoter regions exhibit significant binding scores for RFX3 transcription factor motifs. `MotifScores` computes the binding scores of the provided transcription factor motifs (PWMs) for a set of promoter input sequences (`seq`). The output `scores` will be a matrix where each row corresponds to a DNA sequence, and each column represents a PWM. Each value indicates whether the score for a motif exceeds its threshold. `genes_id` will only contain a subset of `up_DEGs` with significant TF motif binding in their promoter regions.
 
 ```{r patMatch}
 scores = motifScores(seq, pwms, raw.scores = FALSE, verbose = FALSE, cutoff = thresholds)
@@ -538,8 +548,10 @@ highscore_seq <- which(apply(scores,1,sum)>0)
 genes_id <- up_DEGs[highscore_seq,]
 
 dim(genes_id)
+genes_id <- sort_by(genes_id, genes_id$PValue )
 head(genes_id)
 ```
+The resulting dataframe contains more than one thousand up-regulated genes that seems to be controlled by RFX3 TF.
 
 ## 9. PPI analysis
 
@@ -549,6 +561,7 @@ This section of the code focuses on identifying protein-protein interactions (PP
 library(igraph)
 library(tidyr)
 library(biomaRt)
+up_DEGs <- sort_by(up_DEGs, up_DEGs$PValue)[1:200,]
 ```
 
 Firstly, were extracted the unique names of up-regulated DEGs and save them to a tab-separated file (`PPI_up_DEGs.txt`) for input into STRING. Secondly, were load STRING interaction data (`string_interactions.tsv`) containing PPI relationships between genes or proteins. Lastly, the previously exported DEG list was imported for integration with the interaction data.
@@ -557,8 +570,7 @@ Firstly, were extracted the unique names of up-regulated DEGs and save them to a
 write.table(unique(up_DEGs$external_gene_name),sep = '\t', file = 'PPI_up_DEGs.txt',row.names = F, 
             col.names = F, quote = T)
 
-links <- read.delim("string_interactions.tsv") # TSV data downloaded from STRING webpage 
-head(links)
+links <- read.delim("string_interactions_short.tsv") # TSV data downloaded from STRING webpage 
 UP__DEGs <- read.table("PPI_up_DEGs.txt", sep = "\t", header = TRUE)
 ```
 
@@ -571,50 +583,47 @@ library(igraph)
 library(dplyr)
 ```
 
-This section aims to create, annotate, and visualize a Protein-Protein Interaction (PPI) network using interaction data (links) and annotations retrieved via biomaRt. The workflow includes node annotation, graph creation, and customization of visual attributes to enhance biological insights.
+This section aims to create, annotate, and visualize a Protein-Protein Interaction (PPI) network using interaction data (`links`) and annotations retrieved via `biomaRt`. The workflow includes node annotation, graph creation, and customization of visual attributes to enhance biological insights.
 
 ```{r net}
-# Step 1: Use biomaRt to retrieve node annotations
-ensembl <- useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+ensembl <- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", mirror = 'asia')
 
-nodes <- getBM(attributes = c("external_gene_name", "ensembl_gene_id", "description", 
+    nodes <- getBM(attributes = c("external_gene_name", "ensembl_gene_id", "description", 
                               "gene_biotype", "start_position", "end_position", 
                               "chromosome_name", "strand"),
                filters = "external_gene_name", 
-               values = unique(c(links$X.node1, links$node2)),  # Combine all nodes in the network
+               values = unique(c(links$X.node1, links$node2)),
                mart = ensembl)
+
+
+nodes <- getBM(attributes=c("external_gene_name","ensembl_gene_id","description","gene_biotype","start_position","end_position","chromosome_name","strand"),
+        filters=c("external_gene_name"), 
+        values=UP__DEGs [,1],
+        mart = ensembl)
 
 # Keep only relevant columns and remove duplicates
 nodes <- unique(nodes[, c("external_gene_name", "description", "gene_biotype", 
                           "start_position", "end_position", "chromosome_name", "strand")])
 
-# Step 2: Filter out nodes that are not in the links
-valid_nodes <- unique(c(links$X.node1, links$node2))  # All nodes in the links
-## Remove duplicate entries in the `nodes` data frame
-# Ensure `external_gene_name` is unique
+valid_nodes <- unique(c(links$X.node1, links$node2))  
+
+# Remove duplicate entries in the nodes data frame
+# Ensure external_gene_name is unique
 nodes <- nodes %>%
   distinct(external_gene_name, .keep_all = TRUE)
 
-# Build the graph after deduplication
+# Build the graph after the duplication
 net <- graph_from_data_frame(
-  d = links[, c("X.node1", "node2")],  # Edges
-  vertices = nodes,                   # Filtered unique nodes
+  d = links[, c("X.node1", "node2")],  
+  vertices = nodes,                   
   directed = FALSE
 )
 
-# Check the network object
-class(net)  # Should be "igraph"
 net
-plot(net)
-
-## Check attributes
-edge_attr(net)
-vertex_attr(net)
-graph_attr(net)
 
 ## Plot the PPI network
 plot(net, 
-     edge.width=5,
+     edge.width=2,
      vertex.color="orange",
      vertex.size=10,
      vertex.frame.color="darkgray",
@@ -622,28 +631,10 @@ plot(net,
      vertex.label.cex=0.7,
      edge.curved=0.1) 
 
-## Color vertex by gene_biotype
-table(V(net)$gene_biotype)
-col = rep("orange",length(V(net)))
-col[which(V(net)$gene_biotype=="processed_pseudogene")] = "purple"
-col[which(V(net)$gene_biotype=="lncRNA")] = "darkgreen"
+# Find the node with the highest degree (most connections)
+most_connected_node_23 <- V(net)[which.max(degree(net))]
 
-plot(net, 
-     edge.width=5,
-     vertex.color=col,
-     vertex.size=10,
-     vertex.frame.color="darkgray",
-     vertex.label.color="black", 
-     vertex.label.cex=0.7,
-     edge.curved=0.1) 
-
-## Vertex size by gene length
-plot(net, 
-     edge.width=5,
-     vertex.color=col,
-     vertex.size=log10(as.numeric(V(net)$end_position-V(net)$start_position)),
-     vertex.frame.color="darkgray",
-     vertex.label.color="black", 
-     vertex.label.cex=0.7,
-     edge.curved=0.1) 
+# Create subgraph of this node and its immediate neighbors
+neighborhood_net_23 <- make_ego_graph(net, order = 1, nodes = most_connected_node_23)[[1]]
+plot(neighborhood_net_23)
 ```
