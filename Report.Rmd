@@ -38,7 +38,7 @@ library(biomaRt)
 ```
 
 ```{r PCG}
-ensembl <- useEnsembl(biomart="ensembl",dataset="hsapiens_gene_ensembl", mirror = "asia")
+ensembl <- useEnsembl(biomart="ensembl",dataset="hsapiens_gene_ensembl", mirror = "useast")
 attributes <- listAttributes(ensembl)
 g_f <- getBM(attributes = c("ensembl_gene_id", "gene_biotype",
                             "external_gene_name"),mart = ensembl,
@@ -278,7 +278,7 @@ Firstly, `entrezgene_id` and `external_gene_name` were retrieved, using the `bio
 # Load results of DEG
 DEGs <- read.table("DEGs.txt",header=T,sep="\t",as.is=T)
 
-ensembl <- useEnsembl(biomart = "ensembl",dataset = "hsapiens_gene_ensembl", mirror = "asia")
+ensembl <- useEnsembl(biomart = "ensembl",dataset = "hsapiens_gene_ensembl", mirror = "useast")
 convert <- getBM(attributes=c("ensembl_gene_id","entrezgene_id","external_gene_name"),
                  filters=c("ensembl_gene_id"), 
                  values=DEGs$ensembl_gene_id,
@@ -452,7 +452,7 @@ Firstly, with `getSeq()` we retrieve the actual DNA sequences of these promoters
 
 ```{r TFs, message=FALSE, warning=FALSE}
 genes <- genes(TxDb.Hsapiens.UCSC.hg38.knownGene)
-ensembl <- useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl", mirror = "asia")
+ensembl <- useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl", mirror = "useast")
 df <- getBM(attributes = c("external_gene_name",'entrezgene_id'),
             values=names(genes),filters ='entrezgene_id', mart = ensembl)
 matched_indices <- match(genes$gene_id, df$entrezgene_id)
@@ -586,15 +586,7 @@ library(dplyr)
 This section aims to create, annotate, and visualize a Protein-Protein Interaction (PPI) network using interaction data (`links`) and annotations retrieved via `biomaRt`. The workflow includes node annotation, graph creation, and customization of visual attributes to enhance biological insights.
 
 ```{r net}
-ensembl <- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", mirror = 'asia')
-
-    nodes <- getBM(attributes = c("external_gene_name", "ensembl_gene_id", "description", 
-                              "gene_biotype", "start_position", "end_position", 
-                              "chromosome_name", "strand"),
-               filters = "external_gene_name", 
-               values = unique(c(links$X.node1, links$node2)),
-               mart = ensembl)
-
+ensembl <- useEnsembl(biomart = "ensembl", dataset = "hsapiens_gene_ensembl", mirror = 'useast')
 
 nodes <- getBM(attributes=c("external_gene_name","ensembl_gene_id","description","gene_biotype","start_position","end_position","chromosome_name","strand"),
         filters=c("external_gene_name"), 
